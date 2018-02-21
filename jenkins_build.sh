@@ -1,6 +1,7 @@
 #!/bin/sh
 
-COMPILER=$Compiler
+set -x
+
 PAR_MAKE="-j 4"
 SOS_GLOBAL_BUILD_OPTS="--enable-picky --enable-pmi-simple FCFLAGS=-fcray-pointer"
 SOS_BUILD_OPTS="--disable-fortran --enable-threads --enable-thread-completion --enable-remote-virtual-addressing --enable-completion-polling --enable-error-checking --enable-lengthy-tests --with-oshrun-launcher=mpiexec.hydra"
@@ -34,6 +35,25 @@ else
 	exit 1
 fi
 
+# Build libev
+cd $JENKINS_SRC
+wget http://dist.schmorp.de/libev/Attic/libev-4.22.tar.gz
+tar -xzvf libev-4.22.tar.gz
+cd libev-4.22 
+./configure --prefix=$JENKINS_INSTALL/libev 
+make 
+make install
+
+# Build Portals 4
+cd $JENKINS_SRC
+git clone --depth 10 https://github.com/regrant/portals4.git portals4
+cd portals4
+./autogen.sh
+./configure --prefix=$JENKINS_INSTALL/portals4/ --with-ev=$JENKINS_INSTALL/libev --enable-zero-mrs --enable-reliable-udp --disable-pmi-from-portals
+# JSD: --enable-transport-shmem removed; it was causing tests to hang
+make $PAR_MAKE
+make install
+
 # Build libfabric
 cd $JENKINS_SRC
 git clone -b v1.5.x --depth 10 https://github.com/ofiwg/libfabric.git libfabric
@@ -54,17 +74,56 @@ make install
 
 # Build SOS
 cd $SOS_SRC
-./autogen.sh
-cd $SOS_SRC
-mkdir ofi-build
-cd ofi-build
-../configure --with-ofi=$JENKINS_INSTALL/libfabric/ --prefix=$JENKINS_INSTALL/sandia-shmem-ofi $SOS_GLOBAL_BUILD_OPTS $SOS_BUILD_OPTS
-make $PAR_MAKE
-make $PAR_MAKE check TESTS=
-make VERBOSE=1 TEST_RUNNER="mpiexec.hydra -np 2" check
-make install
+./autogein.sh
+export BASE_PATH=$PATH
 
-
-if [ "$CC" = "icc" ]; then
-	'[[ ! -z "${INTEL_INSTALL_PATH}" ]] && uninstall_intel_software'
+if [ "$TRANSPORT" = "transport-none" ]
+then
+	cd $SOS_SRC
+	mkdir no-transport-build
+	cd no-transport-build
+	export PATH=$JENKINS_INSTALL/hydra/bin:$BASE_PATH
+	../configure --prefix=$JENKINS_INSTALL/sandia-shmem-none --without-ofi --without-portals4 $SOS_GLOBAL_BUILD_OPTS $SOS_BUILD_OPTS
+	make $PAR_MAKE
+	make $PAR_MAKE check TESTS=
+	make install
+	mpiexec -np 1 test/unit/hello
+elif [ "$TRANSPORT" = "transport-cma" ]
+then
+	cd $SOS_SRC
+	mkdir cma-build
+	cd cma-build
+	export PATH=$JENKINS_INSTALL/hydra/bin:$BASE_PATH
+	../configure --prefix=$JENKINS_INSTALL/sandia-shmem-cma --with-cma $SOS_GLOBAL_BUILD_OPTS $SOS_BUILD_OPTS
+	make $PAR_MAKE
+	make $PAR_MAKE check TESTS=
+	make install
+	mpiexec -np 1 test/unit/hello
+elif [ "$TRANSPORT" = "transport-portals4" ]
+then
+	cd $SOS_SRC
+	mkdir portals4-build
+	cd portals4-build
+	export PATH=$JENKINS_INSTALL/hydra/bin:$JENKINS_INSTALL/portals4/bin:$BASE_PATH
+	../configure --with-portals4=$JENKINS_INSTALL/portals4/ --prefix=$JENKINS_INSTALL/sandia-shmem-portals4 $SOS_GLOBAL_BUILD_OPTS $SOS_BUILD_OPTS
+	make $PAR_MAKE
+	make $PAR_MAKE check TESTS=
+	#- make VERBOSE=1 TEST_RUNNER="mpiexec.hydra -np 2 timeout 10" check
+	make install
+	mpiexec -np 1 test/unit/hello
+elif [ "$TRANSPORT" = "transport-ofi" ]
+then
+	cd $SOS_SRC
+	mkdir ofi-build
+	cd ofi-build
+	export PATH=$JENKINS_INSTALL/hydra/bin:$BASE_PATH
+	../configure --with-ofi=$JENKINS_INSTALL/libfabric/ --prefix=$JENKINS_INSTALL/sandia-shmem-ofi $SOS_GLOBAL_BUILD_OPTS $SOS_BUILD_OPTS
+	make $PAR_MAKE
+	make $PAR_MAKE check TESTS=
+	make VERBOSE=1 TEST_RUNNER="mpiexec.hydra -np 2" check
+	make install
+else
+	echo "Invalid transport protocol. Exiting."
+	exit 1
 fi
+
