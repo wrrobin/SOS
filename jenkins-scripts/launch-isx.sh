@@ -73,5 +73,5 @@ make clean
 EOF
 
 chmod +x job.sh
-salloc -J "ISx-SOS" -N 1 -t 3600 ./job.sh
+salloc -J "ISx-SOS" -N 1 -t 30 ./job.sh
 
