@@ -74,7 +74,7 @@ make install
 
 # Build SOS
 cd $SOS_SRC
-./autogein.sh
+./autogen.sh
 export BASE_PATH=$PATH
 
 if [ "$TRANSPORT" = "transport-none" ]
