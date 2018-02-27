@@ -21,18 +21,50 @@ export JENKINS_INSTALL=$WORKSPACE/jenkins/install
 # Set up Compiler
 if [ "$COMPILER" = "gcc" ]
 then
-        export CC=gcc
-	which gcc
-	gcc --version
+    export CC=gcc
+    which gcc
+    gcc --version
 elif [ "$COMPILER" = "icc" ]
 then
-        export CC=icc
-	source /opt/intel/parallel_studio_xe_2017.4.056/psxevars.sh intel64
-	which icc
-	icc --version
+    export CC=icc
+    source /opt/intel/parallel_studio_xe_2017.4.056/psxevars.sh intel64
+    which icc
+    icc --version
 else
-	echo "Incompatible Compiler. Exiting."
-	exit 1
+    echo "Incompatible Compiler. Exiting."
+    exit 1
+fi
+
+if [ "COLLECTIVE_ALGORITHM" = "auto" ]
+then
+    export SHMEM_BARRIER_ALGORITHM=auto 
+    export SHMEM_BCAST_ALGORITHM=auto 
+    export SHMEM_REDUCE_ALGORITHM=auto 
+    export SHMEM_COLLECT_ALGORITHM=auto 
+    export SHMEM_FCOLLECT_ALGORITHM=auto
+elif [ "COLLECTIVE_ALGORITHM" = "linear" ]
+then
+    export SHMEM_BARRIER_ALGORITHM=linear
+    export SHMEM_BCAST_ALGORITHM=linear
+    export SHMEM_REDUCE_ALGORITHM=linear
+    export SHMEM_COLLECT_ALGORITHM=linear
+    export SHMEM_FCOLLECT_ALGORITHM=linear
+elif [ "COLLECTIVE_ALGORITHM" = "tree" ]
+then
+    export SHMEM_BARRIER_ALGORITHM=tree
+    export SHMEM_BCAST_ALGORITHM=tree
+    export SHMEM_REDUCE_ALGORITHM=tree
+elif [ "COLLECTIVE_ALGORITHM" = "dissem_recdbl" ]
+then
+    export SHMEM_BARRIER_ALGORITHM=dissem
+    export SHMEM_REDUCE_ALGORITHM=recdbl
+    export SHMEM_FCOLLECT_ALGORITHM=recdbl
+elif [ "COLLECTIVE_ALGORITHM" = "ring" ]
+    export SHMEM_FCOLLECT_ALGORITHM=ring
+then
+else
+    echo "Invalid Algorithm option. Exiting."
+    exit 1
 fi
 
 # Build libev
