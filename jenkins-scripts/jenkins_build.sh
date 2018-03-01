@@ -7,16 +7,9 @@ SOS_GLOBAL_BUILD_OPTS="--enable-picky --enable-pmi-simple FCFLAGS=-fcray-pointer
 SOS_BUILD_OPTS="--disable-fortran --enable-error-checking --enable-lengthy-tests --with-oshrun-launcher=mpiexec.hydra"
 
 # Set up the environment
-if [ -d $WORKSPACE/jenkins ] 
-then
-	rm -rf $WORKSPACE/jenkins
-fi
-mkdir $WORKSPACE/jenkins
-mkdir $WORKSPACE/jenkins/src
-mkdir $WORKSPACE/jenkins/install
+mkdir $WORKSPACE/sos-install
 export SOS_SRC=$WORKSPACE
-export JENKINS_SRC=$WORKSPACE/jenkins/src
-export JENKINS_INSTALL=$WORKSPACE/jenkins/install
+export SOS_INSTALL=$WORKSPACE/sos-install
 
 # Reading compiler dimension
 if [ "$COMPILER" = "gcc" ]
@@ -153,7 +146,7 @@ cd $SOS_SRC
 ./autogen.sh
 export BASE_PATH=$PATH
 export PATH=$DEP_BUILD_DIR/hydra/bin:$DEP_BUILD_DIR/portals4/bin:$BASE_PATH
-./configure --prefix=$JENKINS_INSTALL/sandia-shmem $SOS_GLOBAL_BUILD_OPTS $SOS_BUILD_OPTS
+./configure --prefix=$SOS_INSTALL $SOS_GLOBAL_BUILD_OPTS $SOS_BUILD_OPTS
 make $PAR_MAKE
 make $PAR_MAKE check TESTS=
 make install
