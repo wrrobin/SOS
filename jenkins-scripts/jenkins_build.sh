@@ -63,10 +63,10 @@ then
 elif [ "$REMOTE_TRANSPORT" = "portals4" ]
 then
     SOS_BUILD_OPTS="$SOS_BUILD_OPTS --with-portals4=$DEP_BUILD_DIR/portals4/"
-elif [ "$LOCAL_TRANSPORT" = "ofi" ]
+elif [ "$REMOTE_TRANSPORT" = "ofi" ]
 then
     SOS_BUILD_OPTS="$SOS_BUILD_OPTS --with-ofi=$DEP_BUILD_DIR/libfabric/"
-elif [ "$LOCAL_TRANSPORT" = "ofi_completion_polling" ]
+elif [ "$REMOTE_TRANSPORT" = "ofi_completion_polling" ]
 then
     SOS_BUILD_OPTS="$SOS_BUILD_OPTS --with-ofi=$DEP_BUILD_DIR/libfabric/ --with-completion-polling"
 else
