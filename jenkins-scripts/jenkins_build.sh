@@ -66,7 +66,7 @@ then
 elif [ "$REMOTE_TRANSPORT" = "ofi" ]
 then
     SOS_BUILD_OPTS="$SOS_BUILD_OPTS --with-ofi=$DEP_BUILD_DIR/libfabric/"
-elif [ "$REMOTE_TRANSPORT" = "ofi_completion_polling" ]
+elif [ "$REMOTE_TRANSPORT" = "ofi-completion-polling" ]
 then
     SOS_BUILD_OPTS="$SOS_BUILD_OPTS --with-ofi=$DEP_BUILD_DIR/libfabric/ --with-completion-polling"
 else
@@ -84,7 +84,7 @@ then
 elif [ "$MR_MODE" = "mr-fxr" ]
 then
     SOS_BUILD_OPTS="$SOS_BUILD_OPTS --enable-mr-rma-event"
-elif [ "$MR_MODE" = "mr-remote_va" ]
+elif [ "$MR_MODE" = "mr-remote-va" ]
 then
     SOS_BUILD_OPTS="$SOS_BUILD_OPTS --enable-remote-virtual-addressing"
 else
@@ -112,7 +112,7 @@ then
     export SHMEM_BARRIER_ALGORITHM=tree
     export SHMEM_BCAST_ALGORITHM=tree
     export SHMEM_REDUCE_ALGORITHM=tree
-elif [ "$COLLECTIVE_ALGORITHM" = "dissem_recdbl" ]
+elif [ "$COLLECTIVE_ALGORITHM" = "dissem-recdbl" ]
 then
     export SHMEM_BARRIER_ALGORITHM=dissem
     export SHMEM_REDUCE_ALGORITHM=recdbl
@@ -129,7 +129,7 @@ fi
 if [ $THREADS = "enabled" ]
 then
     SOS_BUILD_OPTS="$SOS_BUILD_OPTS"
-elif [ $THREADS = "enabled_completion" ]
+elif [ $THREADS = "enabled-completion" ]
 then
     SOS_BUILD_OPTS="$SOS_BUILD_OPTS --enable-thread-completion"
 elif [ $THREADS = "disabled" ]
