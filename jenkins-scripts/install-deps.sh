@@ -113,9 +113,9 @@ make clean all install
 #make clean all install
 
 ## Download and install OpenMPI RPM 
-cd $GCC_BUILDS
-wget http://gdurl.com/P5og -O openmpi-v3.0.x.deb
-sudo dpkg -i openmpi-v3.0.x.deb
+#cd $GCC_BUILDS
+#wget http://gdurl.com/P5og -O openmpi-v3.0.x.deb
+#sudo dpkg -i openmpi-v3.0.x.deb
 
 
 # Start ICC builds
