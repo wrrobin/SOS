@@ -2,6 +2,7 @@
 
 set -x
 
+COMPILER=${1}
 PAR_MAKE="-j 4"
 SOS_GLOBAL_BUILD_OPTS="--enable-picky --enable-pmi-simple FCFLAGS=-fcray-pointer"
 SOS_BUILD_OPTS="--disable-fortran --enable-error-checking --enable-lengthy-tests --with-oshrun-launcher=mpiexec.hydra"
