@@ -4,8 +4,8 @@ set -x
 
 COMPILER=${1}
 PAR_MAKE="-j 4"
-SOS_GLOBAL_BUILD_OPTS="--enable-picky --enable-pmi-simple FCFLAGS=-fcray-pointer"
-SOS_BUILD_OPTS="--disable-fortran --enable-error-checking --enable-lengthy-tests --with-oshrun-launcher=mpiexec.hydra"
+SOS_GLOBAL_BUILD_OPTS="--enable-picky FCFLAGS=-fcray-pointer"
+SOS_BUILD_OPTS="--enable-error-checking --enable-lengthy-tests"
 
 # Set up the environment
 mkdir $WORKSPACE/sos-install
@@ -53,8 +53,8 @@ elif [ "$LOCAL_TRANSPORT" = "cma" ]
 then
     SOS_BUILD_OPTS="$SOS_BUILD_OPTS --with-cma"
 else
-    echo "Invalid local transport. Exiting."
-    exit 1
+    echo "Invalid local transport. Choosing default."
+    SOS_BUILD_OPTS="$SOS_BUILD_OPTS"
 fi
 
 # Reading remote transport dimension
@@ -71,8 +71,8 @@ elif [ "$REMOTE_TRANSPORT" = "ofi-completion-polling" ]
 then
     SOS_BUILD_OPTS="$SOS_BUILD_OPTS --with-ofi=$DEP_BUILD_DIR/libfabric/ --with-completion-polling"
 else
-    echo "Invalid remote transport. Exiting."
-    exit 1
+    echo "Invalid remote transport. Choosing default."
+    SOS_BUILD_OPTS="$SOS_BUILD_OPTS"
 fi
 
 # Reading mr mode dimension
@@ -89,8 +89,8 @@ elif [ "$MR_MODE" = "mr-remote-va" ]
 then
     SOS_BUILD_OPTS="$SOS_BUILD_OPTS --enable-remote-virtual-addressing"
 else
-    echo "Invalid MR mode. Exiting."
-    exit 1
+    echo "Invalid MR mode. Choosing default."
+    SOS_BUILD_OPTS="$SOS_BUILD_OPTS"
 fi
 
 # Reading collective algorithm dimension
@@ -122,8 +122,7 @@ elif [ "$COLLECTIVE_ALGORITHM" = "ring" ]
 then
     export SHMEM_FCOLLECT_ALGORITHM=ring
 else
-    echo "Invalid Algorithm option. Exiting."
-    exit 1
+    echo "Invalid collective algorithm option. Choosing default."
 fi
 
 # Reading threads dimension
@@ -137,10 +136,65 @@ elif [ $THREADS = "disabled" ]
 then
     SOS_BUILD_OPTS="$SOS_BUILD_OPTS --disable-threads"
 else
-    echo "Invalid Threads option. Exiting."
-    exit 1
+    echo "Invalid threads option. Choosing default."
+    SOS_BUILD_OPTS="$SOS_BUILD_OPTS"
 fi
 
+# Reading optional address vector dimension
+if [ $ADDRESS_VECTOR = "map" ]
+then
+    SOS_BUILD_OPTS="$SOS_BUILD_OPTS --enable-av-map"
+else
+    SOS_BUILD_OPTS="$SOS_BUILD_OPTS"
+fi
+
+# Reading optional build flags dimension
+if [ $BUILD_FLAGS = "fortran" ]
+then
+    SOS_BUILD_OPTS="$SOS_BUILD_OPTS --disable-fortran"
+elif [ $BUILD_FLAGS = "cxx" ]
+then
+    SOS_BUILD_OPTS="$SOS_BUILD_OPTS --disable-cxx"
+elif [ $BUILD_FLAGS = "static" ]
+then
+    SOS_BUILD_OPTS="$SOS_BUILD_OPTS --disable-shared"
+else
+    SOS_BUILD_OPTS="$SOS_BUILD_OPTS --disable-fortran"
+fi
+
+# Reading optional process manager dimension
+if [ $PROCESS_MANAGER = "hydra" ]
+then
+    SOS_BUILD_OPTS="$SOS_BUILD_OPTS --enable-pmi-simple --with-oshrun-launcher=mpiexec.hydra"
+elif [ $BUILD_FLAGS = "slurm" ]
+then
+    SOS_BUILD_OPTS="$SOS_BUILD_OPTS --enable-pmi2 --with-oshrun-launcher=srun"
+elif [ $BUILD_FLAGS = "pmix" ]
+then
+    SOS_BUILD_OPTS="$SOS_BUILD_OPTS --enable-pmix --with-oshrun-launcher=srun"
+elif [ $BUILD_FLAGS = "intel-mpi" ]
+then
+    SOS_BUILD_OPTS="$SOS_BUILD_OPTS"
+else
+    SOS_BUILD_OPTS="$SOS_BUILD_OPTS --enable-pmi-simple --with-oshrun-launcher=mpiexec.hydra"
+fi
+
+# Reading optional hugepage dimension
+if [ $HUGEPAGE = "hugepage-enabled" ]
+then
+    export SHMEM_SYMMETRIC_HEAP_USE_HUGE_PAGES=true
+    export SHMEM_SYMMETRIC_HEAP_PAGE_SIZE=2*1024*1024
+else
+    export SHMEM_SYMMETRIC_HEAP_USE_HUGE_PAGES=false
+fi
+
+# Reading optional bounce buffer dimension
+if [ $BOUNCE_BUFFER = "bb-disabled" ]
+then
+    SOS_BUILD_OPTS="$SOS_BUILD_OPTS --disable-bounce-buffers"
+else
+    SOS_BUILD_OPTS="$SOS_BUILD_OPTS"
+fi
 
 # Build SOS
 cd $SOS_SRC
