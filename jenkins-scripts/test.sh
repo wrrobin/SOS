@@ -54,6 +54,7 @@ cat > sos-isx.sh << "EOF"
 
 set -x
 export PATH=$SOS_INSTALL/bin:$DEP_BUILD_DIR/hydra/bin:$BASE_PATH 
+export BENCH_HOME=$JENKINS_HOME/deps/downloads/ISx/SHMEM
 
 oshrun -np 4 -env SHMEM_SYMMETRIC_SIZE '4G' $BENCH_HOME/bin/isx.strong 134217728 output_strong
 oshrun -np 4 -env SHMEM_SYMMETRIC_SIZE '4G' $BENCH_HOME/bin/isx.weak 33554432 output_weak
@@ -74,6 +75,7 @@ cat > sos-prk.sh << "EOF"
 
 set -x
 export PATH=$SOS_INSTALL/bin:$DEP_BUILD_DIR/hydra/bin:$BASE_PATH
+export BENCH_HOME=$JENKINS_HOME/deps/downloads/PRK
 
 oshrun -np 4 $BENCH_HOME/SHMEM/Stencil/stencil 100 1000
 oshrun -np 4 $BENCH_HOME/SHMEM/Synch_p2p/p2p 10 1000 1000
@@ -100,6 +102,7 @@ cat > sos-mlnx.sh << "EOF"
 
 set -x
 export PATH=$SOS_INSTALL/bin:$DEP_BUILD_DIR/hydra/bin:$BASE_PATH
+export BENCH_HOME=$JENKINS_HOME/deps/downloads/tests-mellanox
 
 oshrun -np 4 $BENCH_HOME/install/bin/oshmem_test exec --task=atomic
 oshrun -np 4 $BENCH_HOME/install/bin/oshmem_test exec --task=basic:start
