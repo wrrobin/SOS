@@ -128,13 +128,13 @@ else
 fi
 
 # Reading threads dimension
-if [ $THREADS = "enabled" ]
+if [ "$THREADS" = "enabled" ]
 then
     SOS_BUILD_OPTS="$SOS_BUILD_OPTS"
-elif [ $THREADS = "enabled-completion" ]
+elif [ "$THREADS" = "enabled-completion" ]
 then
     SOS_BUILD_OPTS="$SOS_BUILD_OPTS --enable-thread-completion"
-elif [ $THREADS = "disabled" ]
+elif [ "$THREADS" = "disabled" ]
 then
     SOS_BUILD_OPTS="$SOS_BUILD_OPTS --disable-threads"
 else
@@ -143,7 +143,7 @@ else
 fi
 
 # Reading optional address vector dimension
-if [ $ADDRESS_VECTOR = "map" ]
+if [ "$ADDRESS_VECTOR" = "map" ]
 then
     SOS_BUILD_OPTS="$SOS_BUILD_OPTS --enable-av-map"
 else
@@ -151,16 +151,16 @@ else
 fi
 
 # Reading optional build flags dimension
-if [ $BUILD_FLAGS = "fortran" ]
+if [ "$BUILD_FLAGS" = "fortran" ]
 then
     SOS_BUILD_OPTS="$SOS_BUILD_OPTS --disable-fortran"
-elif [ $BUILD_FLAGS = "cxx" ]
+elif [ "$BUILD_FLAGS" = "cxx" ]
 then
     SOS_BUILD_OPTS="$SOS_BUILD_OPTS --disable-cxx"
-elif [ $BUILD_FLAGS = "static" ]
+elif [ "$BUILD_FLAGS" = "static" ]
 then
     SOS_BUILD_OPTS="$SOS_BUILD_OPTS --disable-shared"
-elif [ $BUILD_FLAGS = "error-checking" ]
+elif [ "$BUILD_FLAGS" = "error-checking" ]
 then
     SOS_BUILD_OPTS="$SOS_BUILD_OPTS --enable-error-checking"
 else
@@ -168,16 +168,16 @@ else
 fi
 
 # Reading optional process manager dimension
-if [ $PROCESS_MANAGER = "hydra" ]
+if [ "$PROCESS_MANAGER" = "hydra" ]
 then
     SOS_BUILD_OPTS="$SOS_BUILD_OPTS --enable-pmi-simple --with-oshrun-launcher=mpiexec.hydra"
-elif [ $BUILD_FLAGS = "slurm" ]
+elif [ "$PROCESS_MANAGER" = "slurm" ]
 then
     SOS_BUILD_OPTS="$SOS_BUILD_OPTS --enable-pmi2 --with-oshrun-launcher=srun"
-elif [ $BUILD_FLAGS = "pmix" ]
+elif [ "$PROCESS_MANAGER" = "pmix" ]
 then
     SOS_BUILD_OPTS="$SOS_BUILD_OPTS --enable-pmix --with-oshrun-launcher=srun"
-elif [ $BUILD_FLAGS = "intel-mpi" ]
+elif [ "$PROCESS_MANAGER" = "intel-mpi" ]
 then
     SOS_BUILD_OPTS="$SOS_BUILD_OPTS"
 else
@@ -185,7 +185,7 @@ else
 fi
 
 # Reading optional hugepage dimension
-if [ $HUGEPAGE = "hugepage-enabled" ]
+if [ "$HUGEPAGE" = "hugepage-enabled" ]
 then
     export SHMEM_SYMMETRIC_HEAP_USE_HUGE_PAGES=true
     export SHMEM_SYMMETRIC_HEAP_PAGE_SIZE=2*1024*1024
@@ -194,7 +194,7 @@ else
 fi
 
 # Reading optional bounce buffer dimension
-if [ $BOUNCE_BUFFER = "bb-disabled" ]
+if [ "$BOUNCE_BUFFER" = "bb-disabled" ]
 then
     SOS_BUILD_OPTS="$SOS_BUILD_OPTS --disable-bounce-buffers"
 else

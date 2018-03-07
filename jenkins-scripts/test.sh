@@ -150,7 +150,8 @@ cat > sos-cray.sh << "EOF"
 
 set -x
 export PATH=$SOS_INSTALL/bin:$DEP_BUILD_DIR/hydra/bin:$BASE_PATH
-export CRAY_TESTS_DIR=$JENKINS_HOME/deps/downloads/tests-cray
+cp -r $JENKINS_HOME/deps/downloads/tests-cray $WORKSPACE/
+export CRAY_TESTS_DIR=$WORKSPACE/tests-cray
 
 $SOS_SRC/scripts/cray_tests.sh
 
