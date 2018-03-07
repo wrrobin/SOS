@@ -1,12 +1,7 @@
 #!/bin/sh
 
 COMPILER=${1}
-PAR_MAKE="-j 4"
-SOS_GLOBAL_BUILD_OPTS="--enable-picky --enable-pmi-simple FCFLAGS=-fcray-pointer"
-SOS_BUILD_OPTS="--disable-fortran --enable-threads --enable-thread-completion --enable-remote-virtual-addressing --enable-completion-polling --enable-error-checking --enable-lengthy-tests --with-oshrun-launcher=mpiexec.hydra"
-
 # Set up the environment
-mkdir $WORKSPACE/sos-install
 export SOS_SRC=$WORKSPACE
 export SOS_INSTALL=$WORKSPACE/sos-install
 
@@ -37,62 +32,15 @@ else
     exit 1
 fi
 
-# Reading local transport dimension
-if [ "$LOCAL_TRANSPORT" = "local-none" ]
-then
-    SOS_BUILD_OPTS="$SOS_BUILD_OPTS"
-elif [ "$LOCAL_TRANSPORT" = "memcpy" ]
-then
-    SOS_BUILD_OPTS="$SOS_BUILD_OPTS --enable-memcpy"
-elif [ "$LOCAL_TRANSPORT" = "xpmem" ]
-then
-    SOS_BUILD_OPTS="$SOS_BUILD_OPTS --with-xpmem"
-elif [ "$LOCAL_TRANSPORT" = "cma" ]
-then
-    SOS_BUILD_OPTS="$SOS_BUILD_OPTS --with-cma"
-else
-    echo "Invalid local transport. Choosing default."
-    SOS_BUILD_OPTS="$SOS_BUILD_OPTS"
-fi
-
-# Reading remote transport dimension
-if [ "$REMOTE_TRANSPORT" = "remote-none" ]
-then
-    SOS_BUILD_OPTS="$SOS_BUILD_OPTS --without-portals4 --without-ofi"
-elif [ "$REMOTE_TRANSPORT" = "portals4" ]
-then
-    SOS_BUILD_OPTS="$SOS_BUILD_OPTS --with-portals4=$DEP_BUILD_DIR/portals4/"
-elif [ "$REMOTE_TRANSPORT" = "ofi" ]
-then
-    SOS_BUILD_OPTS="$SOS_BUILD_OPTS --with-ofi=$DEP_BUILD_DIR/libfabric/"
-elif [ "$REMOTE_TRANSPORT" = "ofi-completion-polling" ]
-then
-    SOS_BUILD_OPTS="$SOS_BUILD_OPTS --with-ofi=$DEP_BUILD_DIR/libfabric/ --with-completion-polling"
-else
-    echo "Invalid remote transport. Choosing default."
-    SOS_BUILD_OPTS="$SOS_BUILD_OPTS"
-fi
-
-# Build SOS
-cd $SOS_SRC
-./autogen.sh
-export BASE_PATH=$PATH
-export PATH=$DEP_BUILD_DIR/hydra/bin:$DEP_BUILD_DIR/portals4/bin:$BASE_PATH
-cd $SOS_SRC
-./configure --prefix=$SOS_INSTALL $SOS_GLOBAL_BUILD_OPTS $SOS_BUILD_OPTS
-make $PAR_MAKE
-make install
-
 export PATH=$SOS_INSTALL/bin:$DEP_BUILD_DIR/hydra/bin:$BASE_PATH 
 export OSHRUN_LAUNCHER="mpiexec.hydra"
 
-if [ "$BENCHMARK" = "isx" ]
-then
-    export BENCH_HOME=$JENKINS_HOME/deps/downloads/ISx/SHMEM
-    cd $BENCH_HOME
-    make CC=oshcc LDLIBS=-lm
-    # Note: This SHMEM_SYMMETRIC_SIZE setting may exceed the memory available in the CI testing environment
-    cat > job.sh << "EOF"
+# ISx
+BENCH_HOME=$JENKINS_HOME/deps/downloads/ISx/SHMEM
+cd $BENCH_HOME
+make CC=oshcc LDLIBS=-lm
+# Note: This SHMEM_SYMMETRIC_SIZE setting may exceed the memory available in the CI testing environment
+cat > sos-isx.sh << "EOF"
 #!/bin/bash
 
 set -x
@@ -105,12 +53,14 @@ make clean
 
 EOF
 
-elif [ "$BENCHMARK" = "prk" ]
-then
-    export BENCH_HOME=$JENKINS_HOME/deps/downloads/PRK
-    cd $BENCH_HOME
-    make allshmem
-    cat > job.sh << "EOF"
+chmod +x sos-isx.sh
+salloc -J "ISx-SOS" -N 1 -t 30 ./sos-isx.sh
+
+# PRK
+BENCH_HOME=$JENKINS_HOME/deps/downloads/PRK
+cd $BENCH_HOME
+make allshmem
+cat > sos-prk.sh << "EOF"
 #!/bin/bash
 
 set -x
@@ -124,11 +74,11 @@ make clean
 
 EOF
 
-elif [ "$BENCHMARK" = "mellanox" ]
-then
+chmod +x sos-prk.sh
+salloc -J "PRK-SOS" -N 1 -t 30 ./sos-prk.sh
 
-export PATH=$SOS_INSTALL/bin:$DEP_BUILD_DIR/hydra/bin:$BASE_PATH
-export BENCH_HOME=$JENKINS_HOME/deps/downloads/tests-mellanox
+# Mellanox
+BENCH_HOME=$JENKINS_HOME/deps/downloads/tests-mellanox
 cd $BENCH_HOME/verifier
 ./autogen.sh
 ./configure --prefix=$BENCH_HOME/install CFLAGS=" -Wno-deprecated -Wno-deprecated-declarations -std=gnu99 -O3" LDFLAGS="-lpthread" CC=oshcc --disable-mpi --enable-quick-tests --enable-active-sets --disable-error
@@ -136,7 +86,7 @@ make clean
 make install
 make oshmem_test
 
-    cat > job.sh << "EOF"
+cat > sos-mlnx.sh << "EOF"
 #!/bin/bash
 
 set -x
@@ -178,10 +128,12 @@ make clean
 
 EOF
 
-elif [ "$BENCHMARK" = "cray" ]
-then
+chmod +x sos-mlnx.sh
+salloc -J "MLNX-SOS" -N 1 -t 30 ./sos-mlnx.sh
 
-    cat > job.sh << "EOF"
+# Cray
+
+cat > sos-cray.sh << "EOF"
 #!/bin/bash
 
 set -x
@@ -192,8 +144,6 @@ $SOS_SRC/scripts/cray_tests.sh
 
 EOF
 
-fi
-
-chmod +x job.sh
-salloc -J "ISx-SOS" -N 1 -t 30 ./job.sh
+chmod +x sos-cray.sh
+salloc -J "CRAY-SOS" -N 1 -t 30 ./sos-cray.sh
 

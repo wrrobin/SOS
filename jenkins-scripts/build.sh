@@ -5,7 +5,7 @@ set -x
 COMPILER=${1}
 PAR_MAKE="-j 4"
 SOS_GLOBAL_BUILD_OPTS="--enable-picky FCFLAGS=-fcray-pointer"
-SOS_BUILD_OPTS="--enable-error-checking --enable-lengthy-tests"
+SOS_BUILD_OPTS="--enable-lengthy-tests"
 
 # Set up the environment
 mkdir $WORKSPACE/sos-install
@@ -21,6 +21,7 @@ then
     if [ ! -d "$JENKINS_HOME/deps/gcc-builds" ]
     then
         echo "Dependency build directory does not exist. Exiting."
+        exit 1
     fi
     export DEP_BUILD_DIR=$JENKINS_HOME/deps/gcc-builds
 elif [ "$COMPILER" = "icc" ]
@@ -32,6 +33,7 @@ then
     if [ ! -d "$JENKINS_HOME/deps/icc-builds" ]
     then
         echo "Dependency build directory does not exist. Exiting."
+        exit 1
     fi
     export DEP_BUILD_DIR=$JENKINS_HOME/deps/icc-builds
 else
@@ -158,6 +160,9 @@ then
 elif [ $BUILD_FLAGS = "static" ]
 then
     SOS_BUILD_OPTS="$SOS_BUILD_OPTS --disable-shared"
+elif [ $BUILD_FLAGS = "error-checking" ]
+then
+    SOS_BUILD_OPTS="$SOS_BUILD_OPTS --enable-error-checking"
 else
     SOS_BUILD_OPTS="$SOS_BUILD_OPTS --disable-fortran"
 fi
@@ -207,4 +212,4 @@ make $PAR_MAKE check TESTS=
 make install
 mpiexec -np 1 test/unit/hello
 
-echo "Test complete."
+echo "Build SOS complete."
