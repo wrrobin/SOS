@@ -1,9 +1,17 @@
 #!/bin/sh
 
+set -x
+
 COMPILER=${1}
 # Set up the environment
 export SOS_SRC=$WORKSPACE
 export SOS_INSTALL=$WORKSPACE/sos-install
+
+if [ -z "$(ls -A $SOS_INSTALL)" ] 
+then
+    echo "SOS install dir is empty. Exiting."
+    exit 1
+fi
 
 # Reading compiler dimension
 if [ "$COMPILER" = "gcc" ]
@@ -32,6 +40,7 @@ else
     exit 1
 fi
 
+export BASE_PATH=$PATH
 export PATH=$SOS_INSTALL/bin:$DEP_BUILD_DIR/hydra/bin:$BASE_PATH 
 export OSHRUN_LAUNCHER="mpiexec.hydra"
 
