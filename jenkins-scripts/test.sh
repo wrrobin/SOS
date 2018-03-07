@@ -6,6 +6,7 @@ COMPILER=${1}
 # Set up the environment
 export SOS_SRC=$WORKSPACE
 export SOS_INSTALL=$WORKSPACE/sos-install
+SOS_DISABLE_FORTRAN=0
 
 if [ -z "$(ls -A $SOS_INSTALL)" ] 
 then
@@ -40,9 +41,18 @@ else
     exit 1
 fi
 
+# Check whether fortran is disabled
+if [ "$BUILD_FLAGS" = "fortran" ]
+then
+    SOS_DISABLE_FORTRAN=1
+else
+    SOS_DISABLE_FORTRAN=0
+fi
+
 export BASE_PATH=$PATH
 export PATH=$SOS_INSTALL/bin:$DEP_BUILD_DIR/hydra/bin:$BASE_PATH 
 export OSHRUN_LAUNCHER="mpiexec.hydra"
+export SOS_DISABLE_FORTRAN
 
 # ISx
 BENCH_HOME=$JENKINS_HOME/deps/downloads/ISx/SHMEM

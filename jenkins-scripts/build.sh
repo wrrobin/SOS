@@ -164,7 +164,7 @@ elif [ "$BUILD_FLAGS" = "error-checking" ]
 then
     SOS_BUILD_OPTS="$SOS_BUILD_OPTS --enable-error-checking"
 else
-    SOS_BUILD_OPTS="$SOS_BUILD_OPTS --disable-fortran"
+    SOS_BUILD_OPTS="$SOS_BUILD_OPTS"
 fi
 
 # Reading optional process manager dimension
