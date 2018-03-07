@@ -3,6 +3,7 @@
 set -x
 
 COMPILER=${1}
+PAR_MAKE="-j 4"
 # Set up the environment
 export SOS_SRC=$WORKSPACE
 export SOS_INSTALL=$WORKSPACE/sos-install
@@ -162,6 +163,7 @@ set -x
 export PATH=$SOS_INSTALL/bin:$DEP_BUILD_DIR/hydra/bin:$BASE_PATH
 cp -r $JENKINS_HOME/deps/downloads/tests-cray $WORKSPACE/
 export CRAY_TESTS_DIR=$WORKSPACE/tests-cray
+export SOS_DISABLE_FORTRAN
 
 $SOS_SRC/scripts/cray_tests.sh
 
@@ -169,4 +171,48 @@ EOF
 
 chmod +x sos-cray.sh
 salloc -J "CRAY-SOS" -N 1 -t 30 ./sos-cray.sh
+
+# UH
+
+cp -r $JENKINS_HOME/deps/downloads/tests-uh $WORKSPACE/
+
+cat > sos-uh.sh << "EOF"
+#!/bin/bash
+
+set -x
+export PATH=$SOS_INSTALL/bin:$DEP_BUILD_DIR/hydra/bin:$BASE_PATH
+export BENCH_HOME=$WORKSPACE/tests-uh
+export PAR_MAKE="-j 4"
+export SOS_DISABLE_FORTRAN
+cd $BENCH_HOME
+
+make $PAR_MAKE C_feature_tests
+make C_feature_tests-run 2>&1 | tee uh-tests-c-feature-tests.log
+
+# Check for failures in the C tests
+if grep "^(test_[0-9]\+) Running.*Failed$" uh-tests-c-feature-tests.log; then false; else true; fi
+
+if [ -z "$SOS_DISABLE_FORTRAN" ]; then
+    make F_feature_tests;
+    if [ $? -eq 0 ]; then
+        make F_feature_tests-run 2>&1 | tee uh-tests-f-feature-tests.log;
+        # Check for failures in the Fortran tests
+        if grep "^(test_[0-9]\+) Running.*Failed$" uh-tests-f-feature-tests.log; then false; else true; fi;
+    fi;
+fi
+      
+if [ -z "$SOS_DISABLE_FORTRAN" ]; then
+    make F_error_tests;
+    if [ $? -eq 0 -a $SOS_ENABLE_ERROR_TESTS -eq 1 ]; then
+        make F_error_tests-run 2>&1 | tee uh-tests-f-error-tests.log;
+        # Check for failures in the Fortran tests
+        if grep "^(test_[0-9]\+) Running.*Failed$" uh-tests-f-error-tests.log; then false; else true; fi;
+    fi;
+fi
+make clean
+
+EOF
+
+chmod +x sos-uh.sh
+salloc -J "UH-SOS" -N 1 -t 30 ./sos-uh.sh
 
