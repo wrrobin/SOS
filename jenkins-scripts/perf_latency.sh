@@ -68,17 +68,16 @@ set -x
 export PATH=$SOS_INSTALL/bin:$DEP_BUILD_DIR/hydra/bin:$BASE_PATH 
 export RESULT_DIR=$JENKINS_HOME/results
 export COMPILER
+export BENCHMARK
 scontrol show hostnames > hostfile
 
-if [ -f "$RESULT_DIR/result_$BENCHMARK_$COMPILER" ]
+if [ -f "$RESULT_DIR/lat_$BENCHMARK_$COMPILER" ]
 then
-    rm -rf $RESULT_DIR/result_$BENCHMARK_$COMPILER
     rm -rf $RESULT_DIR/lat_$BENCHMARK_$COMPILER
 fi
 
 oshrun -np 2 -ppn 1 -f hostfile $BENCH_HOME/$BENCHMARK > out_$BENCHMARK
-cat out_$BENCHMARK | grep "in bytes" -A24 | tail -n 24 > $RESULT_DIR/result_$BENCHMARK_$COMPILER
-cat $RESULT_DIR/result_$BENCHMARK_$COMPILER | awk '{print $1"\t"$2}' > $RESULT_DIR/lat_$BENCHMARK_$COMPILER
+cat out_$BENCHMARK | grep "in bytes" -A24 | tail -n 24 > $RESULT_DIR/lat_$BENCHMARK_$COMPILER
 
 EOF
 
