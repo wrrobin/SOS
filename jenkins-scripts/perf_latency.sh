@@ -1,8 +1,8 @@
 #!/bin/sh
 
 PAR_MAKE="-j 4"
-SOS_GLOBAL_BUILD_OPTS="--enable-picky --enable-pmi-simple FCFLAGS=-fcray-pointer"
-SOS_BUILD_OPTS="--disable-fortran --enable-threads --enable-thread-completion --enable-remote-virtual-addressing --enable-completion-polling --enable-error-checking --enable-lengthy-tests --with-oshrun-launcher=mpiexec.hydra"
+SOS_GLOBAL_BUILD_OPTS="--enable-picky --enable-pmi-simple"
+SOS_BUILD_OPTS="--disable-fortran --enable-threads --enable-thread-completion --enable-completion-polling --enable-error-checking --enable-lengthy-tests --with-oshrun-launcher=mpiexec.hydra"
 
 # Set up the environment
 mkdir $WORKSPACE/sos-install
@@ -45,12 +45,12 @@ SOS_BUILD_OPTS="$SOS_BUILD_OPTS --with-ofi=$DEP_BUILD_DIR/libfabric/"
 cd $SOS_SRC
 ./autogen.sh
 export BASE_PATH=$PATH
-export PATH=$DEP_BUILD_DIR/hydra/bin:$DEP_BUILD_DIR/portals4/bin:$BASE_PATH
+export PATH=$DEP_BUILD_DIR/hydra/bin:$BASE_PATH
 cd $SOS_SRC
 ./configure --prefix=$SOS_INSTALL $SOS_GLOBAL_BUILD_OPTS $SOS_BUILD_OPTS
 make $PAR_MAKE
-make install
 make $PAR_MAKE check TESTS=
+make install
 
 export PATH=$SOS_INSTALL/bin:$DEP_BUILD_DIR/hydra/bin:$BASE_PATH 
 export OSHRUN_LAUNCHER="mpiexec.hydra"
