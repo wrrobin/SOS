@@ -3,11 +3,16 @@
 PAR_MAKE="-j 4"
 SOS_GLOBAL_BUILD_OPTS="--enable-picky --enable-pmi-simple"
 SOS_BUILD_OPTS="--disable-fortran --enable-threads --enable-thread-completion --enable-completion-polling --enable-error-checking --enable-lengthy-tests --with-oshrun-launcher=mpiexec.hydra"
+RESULT_DIR=$JENKINS_HOME/results
 
 # Set up the environment
 mkdir $WORKSPACE/sos-install
 export SOS_SRC=$WORKSPACE
 export SOS_INSTALL=$WORKSPACE/sos-install
+if [ ! -d "$RESULT_DIR" ]
+then
+    mkdir $RESULT_DIR
+fi
 
 # Reading compiler dimension
 if [ "$COMPILER" = "gcc" ]
@@ -39,7 +44,7 @@ else
 fi
 
 # With OFI installation
-SOS_BUILD_OPTS="$SOS_BUILD_OPTS --with-ofi=$DEP_BUILD_DIR/libfabric/"
+SOS_BUILD_OPTS="$SOS_BUILD_OPTS --with-ofi=/home/rahmanmd/libfabric-git/install"
 
 # Build SOS
 cd $SOS_SRC
@@ -63,7 +68,10 @@ set -x
 export PATH=$SOS_INSTALL/bin:$DEP_BUILD_DIR/hydra/bin:$BASE_PATH 
 scontrol show hostnames > hostfile
 
-oshrun -np 2 -ppn 1 -f hostfile $BENCH_HOME/$BENCHMARK
+oshrun -np 2 -ppn 1 -f hostfile $BENCH_HOME/$BENCHMARK > out_$BENCHMARK
+cat out_$BENCHMARK | grep "in bytes" -A24 | tail -n 24 > $RESULT_DIR/result_$BENCHMARK
+cat $RESULT_DIR/result_$BENCHMARK | awk '{print $1"\t"$2}' > $RESULT_DIR/bw_$BENCHMARK
+cat $RESULT_DIR/result_$BENCHMARK | awk '{print $1"\t"$3}' > $RESULT_DIR/mr_$BENCHMARK
 
 EOF
 
