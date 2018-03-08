@@ -66,6 +66,7 @@ cat > job.sh << "EOF"
 
 set -x
 export PATH=$SOS_INSTALL/bin:$DEP_BUILD_DIR/hydra/bin:$BASE_PATH 
+export RESULT_DIR=$JENKINS_HOME/results
 scontrol show hostnames > hostfile
 
 oshrun -np 2 -ppn 1 -f hostfile $BENCH_HOME/$BENCHMARK > out_$BENCHMARK
