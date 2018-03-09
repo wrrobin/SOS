@@ -17,7 +17,7 @@ fi
 # Reading compiler dimension
 if [ "$COMPILER" = "gcc" ]
 then
-    export CC=gcc
+    source $WORKSPACE/jenkins-scripts/setup_gnu.sh
     which gcc
     gcc --version
     if [ ! -d "$JENKINS_HOME/deps/gcc-builds" ]
@@ -42,7 +42,7 @@ else
     exit 1
 fi
 
-# With OFI installation
+# With OFI installation (Need to install and use, will be done later, pre-installed for now)
 SOS_BUILD_OPTS="$SOS_BUILD_OPTS --with-ofi=/home/rahmanmd/libfabric-git/install"
 
 # Build SOS
