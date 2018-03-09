@@ -28,8 +28,7 @@ then
     export DEP_BUILD_DIR=$JENKINS_HOME/deps/gcc-builds
 elif [ "$COMPILER" = "icc" ]
 then
-    export CC=icc
-    source /opt/intel/parallel_studio_xe_2017.4.056/psxevars.sh intel64
+    source ./setup_intel.sh
     which icc
     icc --version
     if [ ! -d "$JENKINS_HOME/deps/icc-builds" ]
