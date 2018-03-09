@@ -77,9 +77,11 @@ then
 fi
 
 oshrun -np 2 -ppn 1 -f hostfile $BENCH_HOME/$BENCHMARK > out_$BENCHMARK
-cat out_$BENCHMARK | grep "in bytes" -A3 | tail -n 1 | awk '{print $2}' > $WORKSPACE/lat_"$BENCHMARK"_"$COMPILER"
-sed -i '1s/^/Latency \n/' $WORKSPACE/lat_"$BENCHMARK"_"$COMPILER"
-cp out_$BENCHMARK $RESULT_DIR/
+cat out_$BENCHMARK | grep "in bytes" -A24 | tail -n 22 | head -n 10 | awk '{print $2}' > tmp
+sed '$!{:a;N;s/\n/\t/;ta}' tmp > $WORKSPACE/lat_"$BENCHMARK"_"$COMPILER"
+sed -i '1s/^/4B\t8B\t16B\t32B\t64B\t128B\t256B\t512B\t1024B\t2048B\n/' $WORKSPACE/lat_"$BENCHMARK"_"$COMPILER"
+cp out_$BENCHMARK $RESULT_DIR/lat_"$BENCHMARK"_"$COMPILER"
+rm tmp
 
 EOF
 
