@@ -28,7 +28,7 @@ then
     export DEP_BUILD_DIR=$JENKINS_HOME/deps/gcc-builds
 elif [ "$COMPILER" = "icc" ]
 then
-    source ./setup_intel.sh
+    source $WORKSPACE/jenkins-scripts/setup_intel.sh
     which icc
     icc --version
     if [ ! -d "$JENKINS_HOME/deps/icc-builds" ]
