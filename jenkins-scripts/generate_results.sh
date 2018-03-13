@@ -14,6 +14,8 @@ then
 fi
 
 cd $RESULTS_DIR
+rm -rf *.pdf
+
 for file in bw-*
 do
     export plot_name=$file
@@ -92,7 +94,7 @@ cat > results.html << EOF
         <div class="row">
           <div class="col-sm-6">
             <h4 class="text-center caption">Graphs</h4>
-		<embed src="./bw-shmem_bw_put_perf-gcc.pdf" width="500" height="375" type='application/pdf'>
+		<img class="img-rounded" data-src="holder.js/300x200" src="bw-shmem_bw_put_perf-gcc.png" alt="SHMEM Put BW" />
           </div>
         </div>
       </div>
