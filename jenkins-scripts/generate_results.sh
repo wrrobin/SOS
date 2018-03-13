@@ -87,6 +87,15 @@ cat > results.html << EOF
   <script src="http://ajax.googleapis.com/ajax/libs/jqueryui/1.10.3/jquery-ui.js"></script>
 </head>
 <body>
+      <div class="panel-body">
+        <h2 class="text-center caption"></h2>
+        <div class="row">
+          <div class="col-sm-6">
+            <h4 class="text-center caption">Graphs</h4>
+            <img class="img-rounded" data-src="holder.js/300x200" src="bw-shmem_bw_put_perf-gcc.pdf" alt="Put BW GCC" />
+          </div>
+        </div>
+      </div>
 </body>
 </html>
 EOF
