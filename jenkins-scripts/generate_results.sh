@@ -92,7 +92,7 @@ cat > results.html << EOF
         <div class="row">
           <div class="col-sm-6">
             <h4 class="text-center caption">Graphs</h4>
-            <img class="img-rounded" data-src="holder.js/300x200" src="bw-shmem_bw_put_perf-gcc.pdf" alt="Put BW GCC" />
+		<embed src="./bw-shmem_bw_put_perf-gcc.pdf" width="500" height="375" type='application/pdf'>
           </div>
         </div>
       </div>
