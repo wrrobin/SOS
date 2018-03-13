@@ -70,9 +70,10 @@ export COMPILER
 export BENCHMARK
 scontrol show hostnames > hostfile
 
-if [ -f "$RESULT_DIR/bw_$BENCHMARK_$COMPILER" ]
+if [ -f "$RESULT_DIR/bw-$BENCHMARK-$COMPILER" ]
 then
-    rm -rf $RESULT_DIR/bw_"$BENCHMARK"_"$COMPILER"
+    rm -rf $RESULT_DIR/bw-"$BENCHMARK"-"$COMPILER"
+    rm -rf $RESULT_DIR/mr-"$BENCHMARK"-"$COMPILER"
 fi
 
 oshrun -np 2 -ppn 1 -f hostfile $BENCH_HOME/$BENCHMARK > out_$BENCHMARK
@@ -80,10 +81,13 @@ cat out_$BENCHMARK | grep "in bytes" -A24 | tail -n 18 | head -n 10 | awk '{prin
 cat out_$BENCHMARK | grep "in bytes" -A24 | tail -n 18 | head -n 10 | awk '{print $3}' > tmp2
 sed '$!{:a;N;s/\n/,/;ta}' tmp > $WORKSPACE/bw_"$BENCHMARK"_"$COMPILER"
 sed '$!{:a;N;s/\n/,/;ta}' tmp2 > $WORKSPACE/mr_"$BENCHMARK"_"$COMPILER"
+
 sed -i '1s/^/64B,128B,256B,512B,1KB,2KB,4KB,8KB,16KB,32KB\n/' $WORKSPACE/bw_"$BENCHMARK"_"$COMPILER"
 sed -i '1s/^/64B,128B,256B,512B,1KB,2KB,4KB,8KB,16KB,32KB\n/' $WORKSPACE/mr_"$BENCHMARK"_"$COMPILER"
-cat out_$BENCHMARK | grep "in bytes" -A24 | tail -n 24 | awk '{print $1"\t"$2}' > $RESULT_DIR/bw_"$BENCHMARK"_"$COMPILER"
-cat out_$BENCHMARK | grep "in bytes" -A24 | tail -n 24 | awk '{print $1"\t"$3}' > $RESULT_DIR/mr_"$BENCHMARK"_"$COMPILER"
+
+cat out_$BENCHMARK | grep "in bytes" -A24 | tail -n 24 | awk '{print $1"\t"$2}' > $RESULT_DIR/bw-"$BENCHMARK"-"$COMPILER"
+cat out_$BENCHMARK | grep "in bytes" -A24 | tail -n 24 | awk '{print $1"\t"$3}' > $RESULT_DIR/mr-"$BENCHMARK"-"$COMPILER"
+
 rm tmp
 rm tmp2
 
