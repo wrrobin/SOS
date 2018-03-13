@@ -14,7 +14,7 @@ then
 fi
 
 cd $RESULTS_DIR
-for file in bw_*
+for file in bw-*
 do
     export plot_name=$file
 cat > "$file".plot << "EOF"
