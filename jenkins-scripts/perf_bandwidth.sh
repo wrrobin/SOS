@@ -82,7 +82,8 @@ sed '$!{:a;N;s/\n/,/;ta}' tmp > $WORKSPACE/bw_"$BENCHMARK"_"$COMPILER"
 sed '$!{:a;N;s/\n/,/;ta}' tmp2 > $WORKSPACE/mr_"$BENCHMARK"_"$COMPILER"
 sed -i '1s/^/64B,128B,256B,512B,1KB,2KB,4KB,8KB,16KB,32KB\n/' $WORKSPACE/bw_"$BENCHMARK"_"$COMPILER"
 sed -i '1s/^/64B,128B,256B,512B,1KB,2KB,4KB,8KB,16KB,32KB\n/' $WORKSPACE/mr_"$BENCHMARK"_"$COMPILER"
-cp out_$BENCHMARK $RESULT_DIR/bw_"$BENCHMARK"_"$COMPILER"
+cat out_$BENCHMARK | grep "in bytes" -A24 | tail -n 24 | awk '{print $1"\t"$2}' > $RESULT_DIR/bw_"$BENCHMARK"_"$COMPILER"
+cat out_$BENCHMARK | grep "in bytes" -A24 | tail -n 24 | awk '{print $1"\t"$3}' > $RESULT_DIR/mr_"$BENCHMARK"_"$COMPILER"
 rm tmp
 rm tmp2
 
