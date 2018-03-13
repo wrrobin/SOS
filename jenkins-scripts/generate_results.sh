@@ -94,7 +94,7 @@ cat > results.html << EOF
         <div class="row">
           <div class="col-sm-6">
             <h4 class="text-center caption">Graphs</h4>
-		<img class="img-rounded" data-src="holder.js/30x20" src="bw-shmem_bw_put_perf-gcc.png" alt="SHMEM Put BW" style="width:500px;height:600px;"/>
+		<img class="img-rounded" data-src="holder.js/30x20" src="bw-shmem_bw_put_perf-gcc.png" alt="SHMEM Put BW" style="width:400px;height:300px;"/>
           </div>
         </div>
       </div>
