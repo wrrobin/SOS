@@ -485,6 +485,8 @@ int shmem_transport_fence(shmem_transport_ctx_t* ctx)
      * non-fetching atomics to be completed in order to ensure ordering. */
     shmem_transport_put_quiet(ctx);
 #endif
+    /* Complete fetching ops; needed to support nonblocking fetch-atomics */
+    shmem_transport_get_wait(ctx);
 
     return 0;
 }
@@ -536,7 +538,7 @@ int try_again(shmem_transport_ctx_t *ctx, const int ret, uint64_t *polled) {
 
 
 static inline
-void shmem_transport_put_small(shmem_transport_ctx_t* ctx, void *target, const
+void shmem_transport_put_scalar(shmem_transport_ctx_t* ctx, void *target, const
                                void *source, size_t len, int pe)
 {
     int ret = 0;
@@ -618,7 +620,7 @@ void shmem_transport_put_nb(shmem_transport_ctx_t* ctx, void *target, const void
 
     if (len <= shmem_transport_ofi_max_buffered_send) {
 
-        shmem_transport_put_small(ctx, target, source, len, pe);
+        shmem_transport_put_scalar(ctx, target, source, len, pe);
 
     } else if (len <= shmem_transport_ofi_bounce_buffer_size && ctx->cq_ep) {
 
@@ -661,7 +663,7 @@ void shmem_transport_put_nbi(shmem_transport_ctx_t* ctx, void *target, const voi
 {
     if (len <= shmem_transport_ofi_max_buffered_send) {
 
-        shmem_transport_put_small(ctx, target, source, len, pe);
+        shmem_transport_put_scalar(ctx, target, source, len, pe);
 
     } else {
 
@@ -884,7 +886,7 @@ void shmem_transport_mswap(shmem_transport_ctx_t* ctx, void *target, const void 
 
 
 static inline
-void shmem_transport_atomic_small(shmem_transport_ctx_t* ctx, void *target, const void *source, size_t len,
+void shmem_transport_atomic_scalar(shmem_transport_ctx_t* ctx, void *target, const void *source, size_t len,
                                   int pe, int op, int datatype)
 {
     int ret = 0;

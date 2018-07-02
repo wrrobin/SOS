@@ -27,6 +27,7 @@ if HAVE_PTHREADS
 if SHMEMX_TESTS
 check_PROGRAMS += \
 	gettid_register \
+	fadd_nbi \
 	perf_counter
 endif
 endif

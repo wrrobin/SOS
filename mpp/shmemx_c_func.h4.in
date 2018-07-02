@@ -39,3 +39,13 @@ SHMEM_FUNCTION_ATTRIBUTES void SHPRE()shmemx_pcntr_get_completed_get(shmem_ctx_t
 SHMEM_FUNCTION_ATTRIBUTES void SHPRE()shmemx_pcntr_get_completed_target(shmem_ctx_t ctx, uint64_t *cntr_value);
 SHMEM_FUNCTION_ATTRIBUTES void SHPRE()shmemx_pcntr_get_all(shmem_ctx_t ctx, shmem_pcntr_t *pcntr);
 
+/* Nonblocking fetching AMOs */
+define(`SHMEM_C_ATOMIC_FETCH_ADD_NBI',
+`SHMEM_FUNCTION_ATTRIBUTES void SHPRE()shmemx_$1_atomic_fetch_add_nbi($2 *target, $2 *value, $2 *oldval, int pe)')dnl
+SHMEM_DECLARE_FOR_AMO(`SHMEM_C_ATOMIC_FETCH_ADD_NBI')
+
+define(`SHMEM_C_CTX_ATOMIC_FETCH_ADD_NBI',
+`SHMEM_FUNCTION_ATTRIBUTES void SHPRE()shmemx_ctx_$1_atomic_fetch_add_nbi(shmem_ctx_t ctx, $2 *target, $2 *value, $2 *oldval, int pe)')dnl
+SHMEM_DECLARE_FOR_AMO(`SHMEM_C_CTX_ATOMIC_FETCH_ADD_NBI')
+
+
