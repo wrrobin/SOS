@@ -1111,6 +1111,13 @@ int allocate_fabric_resources(struct fabric_info *info)
               FI_MAJOR(info->p_info->fabric_attr->prov_version),
               FI_MINOR(info->p_info->fabric_attr->prov_version));
 
+    if (FI_MAJOR_VERSION != FI_MAJOR(fi_version()) ||
+        FI_MINOR_VERSION != FI_MINOR(fi_version())) {
+        RAISE_WARN_MSG("OFI version mismatch: built %"PRIu32".%"PRIu32", cur. %"PRIu32".%"PRIu32"\n",
+                       FI_MAJOR_VERSION, FI_MINOR_VERSION,
+                       FI_MAJOR(fi_version()), FI_MINOR(fi_version()));
+    }
+
     /* access domain: define communication resource limits/boundary within
      * fabric domain */
     ret = fi_domain(shmem_transport_ofi_fabfd, info->p_info,
@@ -1253,9 +1260,13 @@ int query_for_fabric(struct fabric_info *info)
     shmem_transport_ofi_mr_rma_event = (info->p_info->domain_attr->mr_mode & FI_MR_RMA_EVENT) != 0;
 #endif
 
-    DEBUG_MSG("OFI provider: %s, fabric: %s, domain: %s\n",
+    DEBUG_MSG("OFI provider: %s, fabric: %s, domain: %s\n"
+              RAISE_PE_PREFIX "max_inject: %zd, max_msg: %zd\n",
               info->p_info->fabric_attr->prov_name,
-              info->p_info->fabric_attr->name, info->p_info->domain_attr->name);
+              info->p_info->fabric_attr->name, info->p_info->domain_attr->name,
+              shmem_internal_my_pe,
+              shmem_transport_ofi_max_buffered_send,
+              shmem_transport_ofi_max_msg_size);
 
     return ret;
 }
@@ -1397,7 +1408,7 @@ int shmem_transport_init(void)
 
     if (shmem_internal_params.OFI_PROVIDER_provided)
         shmem_transport_ofi_info.prov_name = shmem_internal_params.OFI_PROVIDER;
-    if (shmem_internal_params.OFI_USE_PROVIDER_provided)
+    else if (shmem_internal_params.OFI_USE_PROVIDER_provided)
         shmem_transport_ofi_info.prov_name = shmem_internal_params.OFI_USE_PROVIDER;
     else
         shmem_transport_ofi_info.prov_name = NULL;
