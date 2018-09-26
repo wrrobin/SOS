@@ -45,21 +45,25 @@
 #define MAX_HOSTNAME_LEN HOST_NAME_MAX
 #endif
 
+#ifndef MAX
+#define MAX(A,B)   (((A)>(B)) ? (A) : (B))
+#endif
+
 #define ONE 1
 
 /* constants for experiments */
 #define MAX_MSG_SIZE (1<<23)
 #define START_LEN 1
 #define INC 2
-#define TRIALS 500
+#define TRIALS 1000
 #define WINDOW_SIZE 64
-#define WARMUP 50
+#define WARMUP 100
 
 /* constants for experiments with large message sizes */
 #define TRIALS_LARGE  100
 #define WINDOW_SIZE_LARGE 64
 #define WARMUP_LARGE  10
-#define LARGE_MESSAGE_SIZE  8192
+#define LARGE_MESSAGE_SIZE  65536
 
 #define TARGET_SZ_MIN 8
 #define TARGET_SZ_MAX 4096
@@ -106,6 +110,25 @@ typedef enum {
     MB
 } bw_units;
 
+typedef enum {
+    OP_FETCH,
+    OP_SET,
+    OP_CSWAP,
+    OP_SWAP,
+    OP_FINC,
+    OP_INC,
+    OP_FADD,
+    OP_ADD,
+    OP_FAND,
+    OP_AND,
+    OP_FOR,
+    OP_OR,
+    OP_FXOR,
+    OP_XOR,
+    SIZE_OF_OP
+} atomic_op_type;
+
+
 typedef struct perf_metrics {
     /* common parameters */
     test_type t_type;
@@ -126,6 +149,7 @@ typedef struct perf_metrics {
     bw_type b_type;
     comm_style cstyle;
     int target_data;
+    int num_partners;
 
     /* parameters specific to latency tests */
     long *target;
@@ -157,6 +181,8 @@ void set_metric_defaults(perf_metrics_t *metric_info) {
 
     metric_info->src = NULL;
     metric_info->dest = NULL;
+
+    metric_info->num_partners = 1;
 
 #if defined(ENABLE_THREADS)
     metric_info->thread_safety = SHMEM_THREAD_SINGLE;
@@ -319,7 +345,7 @@ int validate_recv(char *buf, int len, int partner_pe) {
 /**************************************************************/
 
 static
-int command_line_arg_check(int argc, char *argv[], perf_metrics_t *metric_info) {
+int command_line_arg_check(int argc, char *argv[], perf_metrics_t * const metric_info) {
     int ch, errors = 0;
     extern char *optarg;
 
@@ -398,7 +424,6 @@ int command_line_arg_check(int argc, char *argv[], perf_metrics_t *metric_info) 
             break;
         case 't':
             metric_info->target_data = true;
-            metric_info->window_size = 1;
             if (metric_info->t_type != BW) {
                 errors++;
             } else {
@@ -445,17 +470,6 @@ int command_line_arg_check(int argc, char *argv[], perf_metrics_t *metric_info) 
         }
     }
 
-    /* filling in 8/4KB chunks into array alloc'd to max_len */
-    if(metric_info->t_type == BW && metric_info->target_data) {
-        metric_info->start_len = TARGET_SZ_MIN;
-        if((metric_info->max_len <
-            ((metric_info->trials + metric_info->warmup) * TARGET_SZ_MIN)) ||
-            (metric_info->max_len <
-            ((metric_info->trials + metric_info->warmup) * TARGET_SZ_MAX))) {
-                errors++;
-            }
-    }
-
     return errors;
 }
 
@@ -480,9 +494,9 @@ void print_usage(int errors) {
            "                             cannot be used in conjunction with \n"
            "                             validate, special sizes used, trials + \n"
            "                             warmup * sizes (8/4KB) <= max length \n"
-           " -r TARGET_SIZE              Number of target nodes, use only with -t\n"
-           " -l SOURCE_SIZE              Number of initiator nodes, use only with \n"
-           "                             -t; -l and -r cannot be used together\n"
+           " -r TARGET_SIZE              Number of target nodes, use only with -t;\n"
+           " -l SOURCE_SIZE              Number of initiator nodes, use only with\n"
+           "                             -t\n"
            " -T THREADS                  Number of threads\n"
            " -C THREAD_LEVEL             SHMEM thread level. Possible values: \n"
            "                             SINGLE, FUNNELED, SERIALIZED, MULTIPLE \n"
@@ -492,7 +506,7 @@ void print_usage(int errors) {
 
 #if defined(ENABLE_THREADS)
 static 
-const char *thread_safety_str(perf_metrics_t *metric_info) {
+const char *thread_safety_str(perf_metrics_t * const metric_info) {
     if (metric_info->thread_safety == SHMEM_THREAD_SINGLE) {
         return "SINGLE";
     } else if (metric_info->thread_safety == SHMEM_THREAD_FUNNELED) {
@@ -510,7 +524,7 @@ const char *thread_safety_str(perf_metrics_t *metric_info) {
 }
 
 static inline 
-void thread_safety_validation_check(perf_metrics_t *metric_info) {
+void thread_safety_validation_check(perf_metrics_t * const metric_info) {
     if (metric_info->nthreads == 1)
         return;
     else {
@@ -540,61 +554,63 @@ int only_even_PEs_check(int my_node, int num_pes) {
         return 0;
 }
 
+
+/* Returns partner node; Assumes only one partner */
 static inline 
-int partner_node(perf_metrics_t my_info)
+int partner_node(const perf_metrics_t * const my_info)
 {
-    if(my_info.num_pes == 1)
+    if (my_info->num_pes == 1)
         return 0;
 
-    if (my_info.t_type == BW) {
-        if(my_info.cstyle == COMM_PAIRWISE) {
-            int pairs = my_info.midpt;
+    if (my_info->t_type == BW) {
+        if(my_info->cstyle == COMM_PAIRWISE) {
+            int pairs = my_info->midpt;
 
-            return (my_info.my_node < pairs ? (my_info.my_node + pairs) :
-                   (my_info.my_node - pairs));
+            return (my_info->my_node < pairs ? (my_info->my_node + pairs) :
+                   (my_info->my_node - pairs));
         } else {
-            assert(my_info.cstyle == COMM_INCAST);
+            assert(my_info->cstyle == COMM_INCAST);
             return INCAST_PE;
         }
     } else {
-        int pairs = my_info.midpt;
+        int pairs = my_info->midpt;
 
-        return (my_info.my_node < pairs ? (my_info.my_node + pairs) :
-               (my_info.my_node - pairs));
+        return (my_info->my_node < pairs ? (my_info->my_node + pairs) :
+               (my_info->my_node - pairs));
     }
 }
 
 static inline
-int streaming_node(perf_metrics_t my_info)
+int streaming_node(const perf_metrics_t * const my_info)
 {
-    if(my_info.cstyle == COMM_PAIRWISE) {
-        return (my_info.my_node < my_info.szinitiator);
+    if(my_info->cstyle == COMM_PAIRWISE) {
+        return (my_info->my_node < my_info->szinitiator);
     } else {
-        assert(my_info.cstyle == COMM_INCAST);
+        assert(my_info->cstyle == COMM_INCAST);
         return true;
     }
 }
 
 static inline
-int target_node(perf_metrics_t my_info)
+int target_node(const perf_metrics_t * const my_info)
 {
-    return (my_info.my_node >= my_info.midpt &&
-        (my_info.my_node < (my_info.midpt + my_info.sztarget)));
+    return (my_info->my_node >= my_info->midpt &&
+        (my_info->my_node < (my_info->midpt + my_info->sztarget)));
 }
 
 static inline 
-int is_streaming_node(perf_metrics_t my_info, int node)
+int is_streaming_node(const perf_metrics_t * const my_info, int node)
 {
-    if(my_info.cstyle == COMM_PAIRWISE) {
-        return (node < my_info.szinitiator);
+    if (my_info->cstyle == COMM_PAIRWISE) {
+        return (node < my_info->szinitiator);
     } else {
-        assert(my_info.cstyle == COMM_INCAST);
+        assert(my_info->cstyle == COMM_INCAST);
         return true;
     }
 }
 
 static inline
-int check_hostname_validation(perf_metrics_t my_info) {
+int check_hostname_validation(const perf_metrics_t * const my_info) {
 
     int hostname_status = -1;
 
@@ -609,7 +625,7 @@ int check_hostname_validation(perf_metrics_t my_info) {
         pSync_collect[i] = SHMEM_SYNC_VALUE;
 
     char *hostname = (char *) shmem_malloc (hostname_size * sizeof(char));
-    char *dest = (char *) shmem_malloc (my_info.num_pes * hostname_size * 
+    char *dest = (char *) shmem_malloc (my_info->num_pes * hostname_size * 
                                         sizeof(char));
 
     if (hostname == NULL || dest == NULL) {
@@ -625,12 +641,12 @@ int check_hostname_validation(perf_metrics_t my_info) {
     shmem_barrier_all();
 
     /* nelems needs to be updated based on 32-bit API */
-    shmem_fcollect32(dest, hostname, hostname_size/4, 0, 0, my_info.num_pes, 
+    shmem_fcollect32(dest, hostname, hostname_size/4, 0, 0, my_info->num_pes, 
                      pSync_collect);
 
     char *snode_name = NULL;
     char *tnode_name = NULL;
-    for (i = 0; i < my_info.num_pes; i++) {
+    for (i = 0; i < my_info->num_pes; i++) {
         char *curr_name = &dest[i * hostname_size];
 
         if (is_streaming_node(my_info, i)) {
@@ -675,43 +691,44 @@ int check_hostname_validation(perf_metrics_t my_info) {
 }
 
 static
-int error_checking_init_target_usage(perf_metrics_t *metric_info) {
+int error_checking_init_target_usage(perf_metrics_t * const metric_info) {
     int error = false;
     assert(metric_info->midpt > 0);
 
-    if(metric_info->sztarget != -1 && metric_info->szinitiator != -1)
-        error = true; /* can't use them together  */
-
-    if(metric_info->sztarget != -1) {
-        if(metric_info->sztarget < 1 ||
-           metric_info->sztarget > metric_info->midpt ||
-           !metric_info->target_data) {
+    if (metric_info->sztarget != -1 && metric_info->szinitiator == -1) {
+        if (metric_info->sztarget < 1 ||
+            metric_info->sztarget > metric_info->midpt ||
+            !metric_info->target_data) {
             error = true;
+        } else {
+            metric_info->szinitiator = metric_info->midpt;
         }
-    } else {
-        metric_info->sztarget = metric_info->midpt;
-    }
-
-    if(metric_info->szinitiator != -1) {
-        if(metric_info->szinitiator < 1 ||
-           metric_info->szinitiator > metric_info->midpt ||
-           !metric_info->target_data) {
+    } else if (metric_info->sztarget == -1 && metric_info->szinitiator != -1) {
+        if( metric_info->szinitiator < 1 ||
+            metric_info->szinitiator > metric_info->midpt ||
+            !metric_info->target_data) {
             error = true;
+        } else {
+            metric_info->sztarget = metric_info->midpt;
         }
-    } else {
+    } else if (metric_info->sztarget == -1 && metric_info->szinitiator == -1) {
         metric_info->szinitiator = metric_info->midpt;
+        metric_info->sztarget = metric_info->midpt;
+    } else {
+        if (!metric_info->target_data) {
+            error = true;
+        }
     }
 
-    if(error) {
-        fprintf(stderr, "Invalid usage of command line arg -r/-l,"
-                        " use --help for info\n");
+    if (error) {
+        fprintf(stderr, "Invalid usage of command line arg -r/-l\n");
         return -1;
     }
     return 0;
 }
 
 static inline
-void large_message_metric_chg(perf_metrics_t *metric_info, int len) {
+void large_message_metric_chg(perf_metrics_t * const metric_info, int len) {
     if(len > LARGE_MESSAGE_SIZE) {
         metric_info->window_size = WINDOW_SIZE_LARGE;
         metric_info->trials = TRIALS_LARGE;
@@ -721,14 +738,14 @@ void large_message_metric_chg(perf_metrics_t *metric_info, int len) {
 
 /* put/get bw use opposite streaming/validate nodes */
 static inline
-red_PE_set validation_set(perf_metrics_t my_info, int *nPEs)
+red_PE_set validation_set(perf_metrics_t * const my_info, int *nPEs)
 {
-    if(my_info.cstyle == COMM_PAIRWISE) {
+    if(my_info->cstyle == COMM_PAIRWISE) {
         if(streaming_node(my_info)) {
-            *nPEs = my_info.szinitiator;
+            *nPEs = my_info->szinitiator;
             return FIRST_HALF;
         } else if(target_node(my_info)) {
-            *nPEs = my_info.sztarget;
+            *nPEs = my_info->sztarget;
             return SECOND_HALF;
         } else {
             fprintf(stderr, "Warning: you are getting data from a node that "
@@ -736,8 +753,8 @@ red_PE_set validation_set(perf_metrics_t my_info, int *nPEs)
             return 0;
         }
     } else {
-        assert(my_info.cstyle == COMM_INCAST);
-        *nPEs = my_info.num_pes;
+        assert(my_info->cstyle == COMM_INCAST);
+        *nPEs = my_info->num_pes;
         return FULL_SET;
     }
 }
@@ -746,7 +763,7 @@ red_PE_set validation_set(perf_metrics_t my_info, int *nPEs)
  * then start_pe will print results --- assumes num_pes is even */
 static inline
 void PE_set_used_adjustments(int *nPEs, int *stride, int *start_pe,
-                             perf_metrics_t my_info) {
+                             perf_metrics_t * const my_info) {
     red_PE_set PE_set = validation_set(my_info, nPEs);
 
     if(PE_set == FIRST_HALF || PE_set == FULL_SET) {
@@ -754,25 +771,25 @@ void PE_set_used_adjustments(int *nPEs, int *stride, int *start_pe,
     }
     else {
         assert(PE_set == SECOND_HALF);
-        *start_pe = my_info.midpt;
+        *start_pe = my_info->midpt;
     }
 
     *stride = 0; /* back to back PEs */
 }
 
 static
-void print_header(perf_metrics_t metric_info) {
+void print_header(perf_metrics_t * const metric_info) {
     printf("\n%20sSandia OpenSHMEM Performance Suite%20s\n", " ", " ");
     printf("%20s==================================%20s\n", " ", " ");
     printf("Total Number of PEs:    %10d%6sWindow size:            %10lu\n", 
-            metric_info.num_pes, " ", metric_info.window_size);
+            metric_info->num_pes, " ", metric_info->window_size);
     printf("Number of source PEs:   %10d%6sMaximum message size:   %10lu\n", 
-            metric_info.szinitiator, " ", metric_info.max_len);
+            metric_info->szinitiator, " ", metric_info->max_len);
     printf("Number of target PEs:   %10d%6sNumber of threads:      %10d\n", 
-            metric_info.sztarget, " ", metric_info.nthreads);
-    printf("Iteration count:        %10lu%6s", metric_info.trials, " ");
+            metric_info->sztarget, " ", metric_info->nthreads);
+    printf("Iteration count:        %10lu%6s", metric_info->trials, " ");
 #if defined(ENABLE_THREADS)
-    printf("Thread safety:          %10s\n", thread_safety_str(&metric_info));
+    printf("Thread safety:          %10s\n", thread_safety_str(metric_info));
 #endif
     printf("\n");
 }
