@@ -32,7 +32,6 @@
 #include "shmem_atomic.h"
 #include <sys/types.h>
 
-
 #if !defined(ENABLE_HARD_POLLING) || defined(ENABLE_MANUAL_PROGRESS)
 #define ENABLE_TARGET_CNTR 1
 #else
@@ -283,6 +282,8 @@ extern shmem_transport_ctx_t shmem_transport_ctx_default;
 
 extern struct fid_ep* shmem_transport_ofi_target_ep;
 
+//extern shmem_internal_mutex_t shmem_transport_ofi_lock;  //jdinan changes
+
 #ifdef USE_CTX_LOCK
 #define SHMEM_TRANSPORT_OFI_CTX_LOCK(ctx)                                       \
     do {                                                                        \
@@ -290,12 +291,22 @@ extern struct fid_ep* shmem_transport_ofi_target_ep;
             SHMEM_MUTEX_LOCK((ctx)->lock);                                      \
     } while (0)
 
+/*#define SHMEM_TRANSPORT_OFI_CTX_LOCK(ctx)                                       \
+    do {                                                                        \
+        SHMEM_MUTEX_LOCK(shmem_transport_ofi_lock);                             \
+    } while (0)
+*/
 #define SHMEM_TRANSPORT_OFI_CTX_UNLOCK(ctx)                                     \
     do {                                                                        \
         if (!((ctx)->options & (SHMEM_CTX_PRIVATE | SHMEM_CTX_SERIALIZED)))     \
             SHMEM_MUTEX_UNLOCK((ctx)->lock);                                    \
     } while (0)
 
+/*#define SHMEM_TRANSPORT_OFI_CTX_UNLOCK(ctx)                                     \
+    do {                                                                        \
+        SHMEM_MUTEX_UNLOCK(shmem_transport_ofi_lock);                                    \
+    } while (0)
+*/
 #define SHMEM_TRANSPORT_OFI_CNTR_READ(cntr) *(cntr)
 #define SHMEM_TRANSPORT_OFI_CNTR_INC(cntr) (*(cntr))++
 
@@ -320,16 +331,21 @@ extern struct fid_ep* shmem_transport_ofi_target_ep;
     } while (0)
 
 static inline
-void shmem_transport_probe(void)
+void shmem_transport_probe(void) 
+//void shmem_transport_probe(int take_lock) // jdinan changes
 {
+    if (shmem_internal_yield_fn != NULL) 
+      shmem_internal_yield_fn();
 #if defined(ENABLE_MANUAL_PROGRESS)
 #  ifdef USE_THREAD_COMPLETION
     if (0 == pthread_mutex_trylock(&shmem_transport_ofi_progress_lock)) {
+    //if (take_lock) SHMEM_MUTEX_LOCK(shmem_transport_ofi_lock);
 #  endif
         fi_cntr_read(shmem_transport_ofi_target_cntrfd);
 #  ifdef USE_THREAD_COMPLETION
         pthread_mutex_unlock(&shmem_transport_ofi_progress_lock);
     }
+    //if (take_lock) SHMEM_MUTEX_UNLOCK(shmem_transport_ofi_lock);
 #  endif
 #endif
     return;
@@ -444,11 +460,16 @@ void shmem_transport_put_quiet(shmem_transport_ctx_t* ctx)
         fail = fi_cntr_readerr(ctx->put_cntr);
         cnt = SHMEM_TRANSPORT_OFI_CNTR_READ(&ctx->pending_put_cntr);
 
+        //SHMEM_TRANSPORT_OFI_CTX_UNLOCK(ctx);  //for FI_DOMAIN only; jdinan
         shmem_transport_probe();
+        //SHMEM_TRANSPORT_OFI_CTX_LOCK(ctx);
 
         if (success < cnt && fail == 0) {
             SHMEM_TRANSPORT_OFI_CTX_UNLOCK(ctx);
-            SPINLOCK_BODY();
+            if (shmem_internal_yield_fn != NULL)
+                shmem_internal_yield_fn();
+            else
+                SPINLOCK_BODY();
             SHMEM_TRANSPORT_OFI_CTX_LOCK(ctx);
         } else if (fail) {
             RAISE_ERROR_MSG("Operations completed in error (%" PRIu64 ")\n", fail);
@@ -903,11 +924,16 @@ void shmem_transport_get_wait(shmem_transport_ctx_t* ctx)
         fail = fi_cntr_readerr(ctx->get_cntr);
         cnt = SHMEM_TRANSPORT_OFI_CNTR_READ(&ctx->pending_get_cntr);
 
+        //SHMEM_TRANSPORT_OFI_CTX_UNLOCK(ctx);  //for FI_DOMAIN only; jdinan
         shmem_transport_probe();
+        //SHMEM_TRANSPORT_OFI_CTX_LOCK(ctx);  //for FI_DOMAIN only; jdinan
 
         if (success < cnt && fail == 0) {
             SHMEM_TRANSPORT_OFI_CTX_UNLOCK(ctx);
-            SPINLOCK_BODY();
+            if (shmem_internal_yield_fn != NULL)
+                shmem_internal_yield_fn();
+            else
+                SPINLOCK_BODY();
             SHMEM_TRANSPORT_OFI_CTX_LOCK(ctx);
         } else if (fail) {
             RAISE_ERROR_MSG("Operations completed in error (%" PRIu64 ")\n", fail);
@@ -1477,17 +1503,19 @@ uint64_t shmem_transport_pcntr_get_completed_read(shmem_transport_ctx_t *ctx)
 }
 
 static inline
-uint64_t shmem_transport_pcntr_get_completed_target(void)
+uint64_t shmem_transport_pcntr_get_completed_target(void) //jdinan changes
 {
     uint64_t cnt = 0;
 #if ENABLE_TARGET_CNTR
 #  ifdef USE_THREAD_COMPLETION
     if (0 == pthread_mutex_lock(&shmem_transport_ofi_progress_lock)) {
+    //SHMEM_MUTEX_LOCK(shmem_transport_ofi_lock);
 #  endif
         cnt = fi_cntr_read(shmem_transport_ofi_target_cntrfd);
 #  ifdef USE_THREAD_COMPLETION
         pthread_mutex_unlock(&shmem_transport_ofi_progress_lock);
     }
+    //SHMEM_MUTEX_UNLOCK(shmem_transport_ofi_lock);
 #  endif
 #else
     cnt = 0;

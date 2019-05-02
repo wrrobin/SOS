@@ -474,6 +474,8 @@ void shmem_util_backtrace(void);
 #endif
 
 extern uint64_t (*shmem_internal_gettid_fn)(void);
+extern void (*shmem_internal_yield_fn)(void);
 extern void shmem_internal_register_gettid(uint64_t (*gettid_fn)(void));
+extern void shmem_internal_register_yield(void (*yield_fn)(void));
 
 #endif

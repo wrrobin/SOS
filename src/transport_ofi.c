@@ -1102,6 +1102,7 @@ int query_for_fabric(struct fabric_info *info)
     if (shmem_internal_thread_level == SHMEM_THREAD_MULTIPLE) {
 #ifdef USE_THREAD_COMPLETION
         domain_attr.threading = FI_THREAD_COMPLETION;
+        //domain_attr.threading = FI_THREAD_DOMAIN; //jdinan changes
 #else
         domain_attr.threading = FI_THREAD_SAFE;
 #endif /* USE_THREAD_COMPLETION */

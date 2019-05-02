@@ -16,8 +16,14 @@
 #include "shmem_internal.h"
 
 uint64_t (*shmem_internal_gettid_fn)(void) = NULL;
+void (*shmem_internal_yield_fn)(void) = NULL;
 
 void shmem_internal_register_gettid(uint64_t (*gettid_fn)(void))
 {
     shmem_internal_gettid_fn = gettid_fn;
+}
+
+void shmem_internal_register_yield(void (*yield_fn)(void)) 
+{
+    shmem_internal_yield_fn = yield_fn;
 }

@@ -20,6 +20,7 @@
 #include "shmem_internal.h"
 #include "transport.h"
 #include "shmem_synchronization.h"
+//#include "shmem_fiber.h"
 
 #ifdef ENABLE_PROFILING
 #include "pshmem.h"
@@ -72,3 +73,51 @@ shmemx_register_gettid(uint64_t (*gettid_fn)(void))
     shmem_internal_register_gettid(gettid_fn);
     return;
 }
+
+void SHMEM_FUNCTION_ATTRIBUTES
+shmemx_register_yield(void (*yield_fn)(void))
+{
+    shmem_internal_register_yield(yield_fn);
+    return;
+}
+
+/*SHMEM_FUNCTION_ATTRIBUTES int 
+shmem_create_fibers(int count, int yield_policy)
+{
+    SHMEM_ERR_CHECK_INITIALIZED();
+
+    int ret = create_fibers(count, yield_policy);
+
+    return ret;
+}
+
+SHMEM_FUNCTION_ATTRIBUTES int
+shmem_init_fiber(int fiber_index, void (*thread_func)(int, int), int arg1,
+                  int arg2)
+{
+    SHMEM_ERR_CHECK_INITIALIZED();
+
+    int ret = init_fiber(fiber_index, thread_func, arg1, arg2);
+
+    return ret;
+}
+
+SHMEM_FUNCTION_ATTRIBUTES int
+shmem_start_fiber(int fiber_index)
+{
+    SHMEM_ERR_CHECK_INITIALIZED();
+
+    int ret = start_fiber(fiber_index);
+
+    return ret;
+}
+
+SHMEM_FUNCTION_ATTRIBUTES int
+shmem_fiber_yield(void)
+{
+    SHMEM_ERR_CHECK_INITIALIZED();
+
+    int ret = fiber_yield();
+
+    return ret;
+}*/
