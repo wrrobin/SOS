@@ -81,6 +81,34 @@ shmemx_register_yield(void (*yield_fn)(void))
     return;
 }
 
+void SHMEM_FUNCTION_ATTRIBUTES
+shmemx_register_get_thread_handle(void* (*get_thread_handle_fn)(uint64_t))
+{
+    shmem_internal_register_get_thread_handle(get_thread_handle_fn);
+    return;
+}
+
+int SHMEM_FUNCTION_ATTRIBUTES
+shmemx_get_next_thread(void **next_thread)
+{
+    int ret = shmem_internal_get_next_thread(next_thread);
+    return ret;
+}
+
+void SHMEM_FUNCTION_ATTRIBUTES
+shmemx_thread_scheduler_init(void)
+{
+    shmem_internal_thread_scheduler_init();
+    return;
+}
+
+void SHMEM_FUNCTION_ATTRIBUTES
+shmemx_thread_scheduler_finalize(void)
+{
+    shmem_internal_thread_scheduler_finalize();
+    return;
+}
+
 /*SHMEM_FUNCTION_ATTRIBUTES int 
 shmem_create_fibers(int count, int yield_policy)
 {

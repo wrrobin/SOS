@@ -334,8 +334,8 @@ static inline
 void shmem_transport_probe(void) 
 //void shmem_transport_probe(int take_lock) // jdinan changes
 {
-    if (shmem_internal_yield_fn != NULL) 
-      shmem_internal_yield_fn();
+    //if (shmem_internal_yield_fn != NULL) 
+      //shmem_internal_yield_fn();
 #if defined(ENABLE_MANUAL_PROGRESS)
 #  ifdef USE_THREAD_COMPLETION
     if (0 == pthread_mutex_trylock(&shmem_transport_ofi_progress_lock)) {
@@ -466,8 +466,10 @@ void shmem_transport_put_quiet(shmem_transport_ctx_t* ctx)
 
         if (success < cnt && fail == 0) {
             SHMEM_TRANSPORT_OFI_CTX_UNLOCK(ctx);
-            if (shmem_internal_yield_fn != NULL)
+            if (shmem_internal_yield_fn != NULL) {
+                shmem_internal_add_to_thread_queue((shmem_ctx_t *) ctx, 0, success);
                 shmem_internal_yield_fn();
+            }
             else
                 SPINLOCK_BODY();
             SHMEM_TRANSPORT_OFI_CTX_LOCK(ctx);
@@ -930,8 +932,10 @@ void shmem_transport_get_wait(shmem_transport_ctx_t* ctx)
 
         if (success < cnt && fail == 0) {
             SHMEM_TRANSPORT_OFI_CTX_UNLOCK(ctx);
-            if (shmem_internal_yield_fn != NULL)
+            if (shmem_internal_yield_fn != NULL) {
+                shmem_internal_add_to_thread_queue((shmem_ctx_t *) ctx, 1, success);
                 shmem_internal_yield_fn();
+            }
             else
                 SPINLOCK_BODY();
             SHMEM_TRANSPORT_OFI_CTX_LOCK(ctx);

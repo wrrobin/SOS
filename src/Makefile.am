@@ -60,6 +60,7 @@ libsma_la_SOURCES = \
 	shmem_env_defs.h \
 	contexts_c.c \
 	contexts.c \
+	thread_scheduler.c \
 	perf_counters_c.c \
 	backtrace.c
 
