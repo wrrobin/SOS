@@ -32,7 +32,8 @@
 #include "shmem_atomic.h"
 #include <sys/types.h>
 
-#if !defined(ENABLE_HARD_POLLING) || defined(ENABLE_MANUAL_PROGRESS)
+
+#if !defined(ENABLE_HARD_POLLING)
 #define ENABLE_TARGET_CNTR 1
 #else
 #define ENABLE_TARGET_CNTR 0
@@ -40,6 +41,9 @@
 
 #if ENABLE_TARGET_CNTR
 extern struct fid_cntr*                 shmem_transport_ofi_target_cntrfd;
+#endif
+#if ENABLE_MANUAL_PROGRESS
+extern struct fid_cq*                   shmem_transport_ofi_target_cq;
 #endif
 #ifndef ENABLE_MR_SCALABLE
 extern uint64_t*                        shmem_transport_ofi_target_heap_keys;
@@ -282,8 +286,6 @@ extern shmem_transport_ctx_t shmem_transport_ctx_default;
 
 extern struct fid_ep* shmem_transport_ofi_target_ep;
 
-//extern shmem_internal_mutex_t shmem_transport_ofi_lock;  //jdinan changes
-
 #ifdef USE_CTX_LOCK
 #define SHMEM_TRANSPORT_OFI_CTX_LOCK(ctx)                                       \
     do {                                                                        \
@@ -291,22 +293,12 @@ extern struct fid_ep* shmem_transport_ofi_target_ep;
             SHMEM_MUTEX_LOCK((ctx)->lock);                                      \
     } while (0)
 
-/*#define SHMEM_TRANSPORT_OFI_CTX_LOCK(ctx)                                       \
-    do {                                                                        \
-        SHMEM_MUTEX_LOCK(shmem_transport_ofi_lock);                             \
-    } while (0)
-*/
 #define SHMEM_TRANSPORT_OFI_CTX_UNLOCK(ctx)                                     \
     do {                                                                        \
         if (!((ctx)->options & (SHMEM_CTX_PRIVATE | SHMEM_CTX_SERIALIZED)))     \
             SHMEM_MUTEX_UNLOCK((ctx)->lock);                                    \
     } while (0)
 
-/*#define SHMEM_TRANSPORT_OFI_CTX_UNLOCK(ctx)                                     \
-    do {                                                                        \
-        SHMEM_MUTEX_UNLOCK(shmem_transport_ofi_lock);                                    \
-    } while (0)
-*/
 #define SHMEM_TRANSPORT_OFI_CNTR_READ(cntr) *(cntr)
 #define SHMEM_TRANSPORT_OFI_CNTR_INC(cntr) (*(cntr))++
 
@@ -332,7 +324,6 @@ extern struct fid_ep* shmem_transport_ofi_target_ep;
 
 static inline
 void shmem_transport_probe(void) 
-//void shmem_transport_probe(int take_lock) // jdinan changes
 {
     //if (shmem_internal_yield_fn != NULL) 
       //shmem_internal_yield_fn();
@@ -341,13 +332,17 @@ void shmem_transport_probe(void)
     if (0 == pthread_mutex_trylock(&shmem_transport_ofi_progress_lock)) {
     //if (take_lock) SHMEM_MUTEX_LOCK(shmem_transport_ofi_lock);
 #  endif
-        fi_cntr_read(shmem_transport_ofi_target_cntrfd);
+        struct fi_cq_entry buf;
+        int ret = fi_cq_read(shmem_transport_ofi_target_cq, &buf, 1);
+        if (ret == 1)
+            RAISE_WARN_STR("Unexpected event");
 #  ifdef USE_THREAD_COMPLETION
         pthread_mutex_unlock(&shmem_transport_ofi_progress_lock);
     }
     //if (take_lock) SHMEM_MUTEX_UNLOCK(shmem_transport_ofi_lock);
 #  endif
 #endif
+
     return;
 }
 
@@ -544,6 +539,8 @@ int try_again(shmem_transport_ctx_t *ctx, const int ret, uint64_t *polled) {
                     RAISE_ERROR_MSG("Error reading from CQ (%zd)\n", ret);
                 }
             }
+
+            shmem_transport_probe();
 
             (*polled)++;
 
@@ -1513,13 +1510,11 @@ uint64_t shmem_transport_pcntr_get_completed_target(void) //jdinan changes
 #if ENABLE_TARGET_CNTR
 #  ifdef USE_THREAD_COMPLETION
     if (0 == pthread_mutex_lock(&shmem_transport_ofi_progress_lock)) {
-    //SHMEM_MUTEX_LOCK(shmem_transport_ofi_lock);
 #  endif
         cnt = fi_cntr_read(shmem_transport_ofi_target_cntrfd);
 #  ifdef USE_THREAD_COMPLETION
         pthread_mutex_unlock(&shmem_transport_ofi_progress_lock);
     }
-    //SHMEM_MUTEX_UNLOCK(shmem_transport_ofi_lock);
 #  endif
 #else
     cnt = 0;
