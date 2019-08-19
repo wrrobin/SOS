@@ -84,7 +84,12 @@ shmem_internal_fence(shmem_ctx_t ctx)
     do {                                                 \
         while (*(var) == value) {                        \
             shmem_transport_probe();                     \
-            SPINLOCK_BODY(); }                           \
+            /*if (SHMEM_CHECK_USER_YIELD_FN_EXISTS) {      \
+                shmem_internal_yield_fn(-1);               \
+            }                                            \
+            else */                                        \
+                SPINLOCK_BODY();                         \
+        }                                                \
     } while(0)
 
 #define SHMEM_WAIT_UNTIL_POLL(var, cond, value)          \
@@ -94,7 +99,11 @@ shmem_internal_fence(shmem_ctx_t ctx)
         COMP(cond, *(var), value, cmpret);               \
         while (!cmpret) {                                \
             shmem_transport_probe();                     \
-            SPINLOCK_BODY();                             \
+            /*if (SHMEM_CHECK_USER_YIELD_FN_EXISTS) {      \
+                shmem_internal_yield_fn(-1);               \
+            }                                            \
+            else*/                                         \
+                SPINLOCK_BODY();                         \
             COMP(cond, *(var), value, cmpret);           \
         }                                                \
     } while(0)

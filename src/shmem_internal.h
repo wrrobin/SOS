@@ -474,16 +474,26 @@ void shmem_util_backtrace(void);
 #endif
 
 extern uint64_t (*shmem_internal_gettid_fn)(void);
-extern void (*shmem_internal_yield_fn)(void);
-extern void* (*shmem_internal_get_thread_handle_fn)(uint64_t);
+extern void (*shmem_internal_yield_fn)(int);
+extern void* (*shmem_internal_get_thread_handle_fn)(void);
 
 extern void shmem_internal_register_gettid(uint64_t (*gettid_fn)(void));
-extern void shmem_internal_register_yield(void (*yield_fn)(void));
-extern void shmem_internal_register_get_thread_handle(void* (*get_thread_handle_fn)(uint64_t));
+extern void shmem_internal_register_yield(void (*yield_fn)(int));
+extern void shmem_internal_register_get_thread_handle(void* (*get_thread_handle_fn)(void));
 
-extern void shmem_internal_thread_scheduler_init(void);
+extern void shmem_internal_thread_scheduler_init(uint64_t num_threads);
 extern void shmem_internal_thread_scheduler_finalize(void);
-extern int shmem_internal_add_to_thread_queue(shmem_ctx_t *ctx, int reason, uint64_t value);
-extern int shmem_internal_get_next_thread(void **next_thread);
+extern int shmem_internal_add_to_thread_queue(shmem_ctx_t *ctx, int reason, uint64_t cnt, uint64_t value);
+extern void shmem_internal_remove_from_thread_queue(void);
+extern int shmem_internal_get_next_thread(uint64_t caller_tid, void **next_thread);
+extern int shmem_internal_runnable_thread_exists(uint64_t caller_tid);
+
+#define SHMEM_CHECK_USER_YIELD_FN_EXISTS (shmem_internal_yield_fn != NULL)
+
+#define SCHEDULER_RET_CODE_UNINITIALIZED -1
+#define SCHEDULER_RET_CODE_QUEUE_EMPTY -2
+#define SCHEDULER_RET_CODE_ALL_THREADS_NOT_STARTED -3
+#define SCHEDULER_RET_CODE_NO_RUNNABLE_THREADS -4
+
 
 #endif

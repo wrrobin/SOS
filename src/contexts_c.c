@@ -75,30 +75,30 @@ shmemx_register_gettid(uint64_t (*gettid_fn)(void))
 }
 
 void SHMEM_FUNCTION_ATTRIBUTES
-shmemx_register_yield(void (*yield_fn)(void))
+shmemx_register_yield(void (*yield_fn)(int))
 {
     shmem_internal_register_yield(yield_fn);
     return;
 }
 
 void SHMEM_FUNCTION_ATTRIBUTES
-shmemx_register_get_thread_handle(void* (*get_thread_handle_fn)(uint64_t))
+shmemx_register_get_thread_handle(void* (*get_thread_handle_fn)(void))
 {
     shmem_internal_register_get_thread_handle(get_thread_handle_fn);
     return;
 }
 
 int SHMEM_FUNCTION_ATTRIBUTES
-shmemx_get_next_thread(void **next_thread)
+shmemx_get_next_thread(uint64_t caller_tid, void **next_thread)
 {
-    int ret = shmem_internal_get_next_thread(next_thread);
+    int ret = shmem_internal_get_next_thread(caller_tid, next_thread);
     return ret;
 }
 
 void SHMEM_FUNCTION_ATTRIBUTES
-shmemx_thread_scheduler_init(void)
+shmemx_thread_scheduler_init(uint64_t num_threads)
 {
-    shmem_internal_thread_scheduler_init();
+    shmem_internal_thread_scheduler_init(num_threads);
     return;
 }
 
@@ -106,6 +106,13 @@ void SHMEM_FUNCTION_ATTRIBUTES
 shmemx_thread_scheduler_finalize(void)
 {
     shmem_internal_thread_scheduler_finalize();
+    return;
+}
+
+void SHMEM_FUNCTION_ATTRIBUTES
+shmemx_thread_unregister(void)
+{
+    shmem_internal_remove_from_thread_queue();
     return;
 }
 
