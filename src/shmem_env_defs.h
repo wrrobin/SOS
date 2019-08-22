@@ -110,3 +110,9 @@ SHMEM_INTERNAL_ENV_DEF(MPI_THREAD_LEVEL, string, "MPI_THREAD_SINGLE", SHMEM_INTE
 SHMEM_INTERNAL_ENV_DEF(BACKTRACE, string, "", SHMEM_INTERNAL_ENV_CAT_OTHER,
                        "Specify the mechanism to use for backtracing on failure")
 
+SHMEM_INTERNAL_ENV_DEF(ADAPTIVE_THREAD_SCHEDULE, long, 1, SHMEM_INTERNAL_ENV_CAT_OTHER,
+                       "Specify whether adaptive thread scheduling is utilized")
+
+SHMEM_INTERNAL_ENV_DEF(THREAD_SCHEDULE_VERBOSE, long, 0, SHMEM_INTERNAL_ENV_CAT_OTHER,
+                       "Print debug messages for thread scheduling utilized")
+

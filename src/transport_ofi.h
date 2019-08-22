@@ -32,6 +32,7 @@
 #include "shmem_atomic.h"
 #include <sys/types.h>
 
+//#include "rdtsc.h"
 
 #if !defined(ENABLE_HARD_POLLING)
 #define ENABLE_TARGET_CNTR 1
@@ -62,6 +63,11 @@ extern size_t                           shmem_transport_ofi_bounce_buffer_size;
 extern long                             shmem_transport_ofi_max_bounce_buffers;
 
 extern pthread_mutex_t                  shmem_transport_ofi_progress_lock;
+
+extern int				ult_scheduling_mode; 
+
+static int 				blind_yield_pq = -1;
+static int 				blind_yield_gw = -1;
 
 #ifndef MIN
 #define MIN(a,b) (((a)<(b))?(a):(b))
@@ -421,13 +427,6 @@ shmem_transport_ofi_bounce_buffer_t * create_bounce_buffer(shmem_transport_ctx_t
     return buff;
 }
 
-/*static int64_t thread_in_pq = -1;
-static uint64_t wrong_thread_in_pq_count = 0;
-static uint64_t total_yield_call_pq = 0;
-*/
-
-static uint64_t yielded_to_tid = -1;
-
 static inline
 void shmem_transport_put_quiet(shmem_transport_ctx_t* ctx)
 {
@@ -454,7 +453,6 @@ void shmem_transport_put_quiet(shmem_transport_ctx_t* ctx)
      */
     uint64_t success, fail, cnt, cnt_new;
     long poll_count = 0;
-    //thread_in_pq = -1;
     while (poll_count < shmem_transport_ofi_put_poll_limit ||
            shmem_transport_ofi_put_poll_limit < 0) {
         success = fi_cntr_read(ctx->put_cntr);
@@ -468,27 +466,24 @@ void shmem_transport_put_quiet(shmem_transport_ctx_t* ctx)
         if (success < cnt && fail == 0) {
             SHMEM_TRANSPORT_OFI_CTX_UNLOCK(ctx);
             if (SHMEM_CHECK_USER_YIELD_FN_EXISTS) {
-                shmem_internal_add_to_thread_queue((shmem_ctx_t *) ctx, 0, cnt, success);
-                /*total_yield_call_pq++;
-                if (thread_in_pq == shmem_internal_gettid_fn()) {
-                    wrong_thread_in_pq_count++;
-                    if (shmem_internal_my_pe == 0) fprintf(stderr, "Total yield call %lu and wrong calls %lu in pq for tid = %ld and success = %lu, cnt = %lu\n", total_yield_call_pq, wrong_thread_in_pq_count, thread_in_pq, success, cnt);
-                    
-                }
-*/
-                uint64_t current_tid = shmem_internal_gettid_fn();
-                int ret = shmem_internal_runnable_thread_exists(current_tid);
-                //if (shmem_internal_my_pe == 0) fprintf(stderr, "Ret code from func %d\n", ret);
-                if (ret == SCHEDULER_RET_CODE_ALL_THREADS_NOT_STARTED) 
-                    shmem_internal_yield_fn(-1);
-                else if (ret == 1) {
-                    yielded_to_tid = ret;
-                    shmem_internal_yield_fn(0);
-                }
+                if (ult_scheduling_mode) {
+                    shmem_internal_add_to_thread_queue((shmem_ctx_t *) ctx, 0, cnt, success);
+                    int ret = shmem_internal_runnable_thread_exists();
 
-                //thread_in_pq = shmem_internal_gettid_fn();
-                uint64_t resuming_tid = shmem_internal_gettid_fn();
-                if (yielded_to_tid == resuming_tid) break;
+                    if (ret == SCHEDULER_RET_CODE_ALL_THREADS_NOT_STARTED) {
+                        blind_yield_pq = 1; 
+                        shmem_internal_yield_fn(-1);
+                    } else if (ret >= 0) {
+                        blind_yield_pq = 0;
+                        shmem_internal_yield_fn(0);
+                    } else {
+                        blind_yield_pq = -1;
+                    }
+
+                    if (blind_yield_pq == 0) break;
+                } else {
+                    shmem_internal_yield_fn(-1);
+                }
             }
             else
                 SPINLOCK_BODY();
@@ -945,7 +940,6 @@ void shmem_transport_get_wait(shmem_transport_ctx_t* ctx)
 
     SHMEM_TRANSPORT_OFI_CTX_LOCK(ctx);
 
-    //thread_in_gw = -1;
     while (poll_count < shmem_transport_ofi_get_poll_limit ||
            shmem_transport_ofi_get_poll_limit < 0) {
         success = fi_cntr_read(ctx->get_cntr);
@@ -955,33 +949,27 @@ void shmem_transport_get_wait(shmem_transport_ctx_t* ctx)
         //SHMEM_TRANSPORT_OFI_CTX_UNLOCK(ctx);  //for FI_DOMAIN only; jdinan
         shmem_transport_probe();
         //SHMEM_TRANSPORT_OFI_CTX_LOCK(ctx);  //for FI_DOMAIN only; jdinan
-
         if (success < cnt && fail == 0) {
             SHMEM_TRANSPORT_OFI_CTX_UNLOCK(ctx);
             if (SHMEM_CHECK_USER_YIELD_FN_EXISTS) {
-                shmem_internal_add_to_thread_queue((shmem_ctx_t *) ctx, 1, cnt, success);
-                /*total_yield_call_gw++;
-                if (thread_in_gw == shmem_internal_gettid_fn()) {
-                    wrong_thread_in_gw_count++;
-                    if (shmem_internal_my_pe == 0) fprintf(stderr, "Total yield call %lu and wrong calls %lu in gw for tid = %ld and success = %lu, cnt = %lu\n", total_yield_call_gw, wrong_thread_in_gw_count, thread_in_gw, success, cnt);
-
-                }*/
+                if (ult_scheduling_mode) {
+                    shmem_internal_add_to_thread_queue((shmem_ctx_t *) ctx, 1, cnt, success);
                 
-                uint64_t current_tid = shmem_internal_gettid_fn();
-                int ret = shmem_internal_runnable_thread_exists(current_tid);
-                //if (shmem_internal_my_pe == 0) fprintf(stderr, "Ret code from func %d\n", ret);
-                if (ret == SCHEDULER_RET_CODE_ALL_THREADS_NOT_STARTED)
+                    int ret = shmem_internal_runnable_thread_exists();
+                    if (ret == SCHEDULER_RET_CODE_ALL_THREADS_NOT_STARTED) {
+                        blind_yield_gw = 1;
+                        shmem_internal_yield_fn(-1);
+                    } else if (ret >= 0) {
+                        blind_yield_gw = 0;
+                        shmem_internal_yield_fn(0);
+                    } else {
+                        blind_yield_gw = -1;
+                    }
+
+                    if (blind_yield_gw == 0) break;
+                } else {
                     shmem_internal_yield_fn(-1);
-                else if (ret == 1) {
-                    yielded_to_tid = ret;
-                    shmem_internal_yield_fn(0);
                 }
-
-                //thread_in_gw = shmem_internal_gettid_fn();
-                uint64_t resuming_tid = shmem_internal_gettid_fn();
-                if (yielded_to_tid == resuming_tid) break;
-
-                //if (shmem_internal_my_pe == 0) fprintf(stderr, "Resuming with tid in gw = %ld\n", thread_in_gw);
             }
             else
                 SPINLOCK_BODY();

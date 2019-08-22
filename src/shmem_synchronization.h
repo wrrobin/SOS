@@ -85,7 +85,16 @@ shmem_internal_fence(shmem_ctx_t ctx)
         while (*(var) == value) {                        \
             shmem_transport_probe();                     \
             /*if (SHMEM_CHECK_USER_YIELD_FN_EXISTS) {      \
-                shmem_internal_yield_fn(-1);               \
+                if (ult_scheduling_mode) {               \
+                    shmem_internal_add_to_thread_queue(NULL, 100, 0, 0); \
+                    int ret = shmem_internal_runnable_thread_exists(); \
+                    if (ret >= 0)                            \
+                        shmem_internal_yield_fn(0);          \
+                    else                                     \
+                        shmem_internal_yield_fn(-1);         \
+                } else {                                 \
+                    shmem_internal_yield_fn(-1);         \
+                }                                        \
             }                                            \
             else */                                        \
                 SPINLOCK_BODY();                         \
@@ -100,7 +109,16 @@ shmem_internal_fence(shmem_ctx_t ctx)
         while (!cmpret) {                                \
             shmem_transport_probe();                     \
             /*if (SHMEM_CHECK_USER_YIELD_FN_EXISTS) {      \
-                shmem_internal_yield_fn(-1);               \
+                if (ult_scheduling_mode) {               \
+                    shmem_internal_add_to_thread_queue(NULL, 100, 0, 0); \
+                    int ret = shmem_internal_runnable_thread_exists(); \
+                    if (ret >= 0)                            \
+                        shmem_internal_yield_fn(0);          \
+                    else                                     \
+                        shmem_internal_yield_fn(-1);         \
+                } else {                                 \
+                    shmem_internal_yield_fn(-1);         \
+                }                                        \
             }                                            \
             else*/                                         \
                 SPINLOCK_BODY();                         \

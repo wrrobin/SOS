@@ -485,8 +485,8 @@ extern void shmem_internal_thread_scheduler_init(uint64_t num_threads);
 extern void shmem_internal_thread_scheduler_finalize(void);
 extern int shmem_internal_add_to_thread_queue(shmem_ctx_t *ctx, int reason, uint64_t cnt, uint64_t value);
 extern void shmem_internal_remove_from_thread_queue(void);
-extern int shmem_internal_get_next_thread(uint64_t caller_tid, void **next_thread);
-extern int shmem_internal_runnable_thread_exists(uint64_t caller_tid);
+extern int shmem_internal_get_next_thread(void **next_thread);
+extern int shmem_internal_runnable_thread_exists(void);
 
 #define SHMEM_CHECK_USER_YIELD_FN_EXISTS (shmem_internal_yield_fn != NULL)
 

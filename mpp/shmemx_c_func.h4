@@ -30,7 +30,7 @@ SHMEM_FUNCTION_ATTRIBUTES void SHPRE()shmemx_pcontrol(int level, ...);
 SHMEM_FUNCTION_ATTRIBUTES void SHPRE()shmemx_register_gettid(uint64_t (*gettid_fn)(void));
 SHMEM_FUNCTION_ATTRIBUTES void SHPRE()shmemx_register_yield(void (*yield_fn)(int));
 SHMEM_FUNCTION_ATTRIBUTES void SHPRE()shmemx_register_get_thread_handle(void* (*get_thread_handle_fn)(void));
-SHMEM_FUNCTION_ATTRIBUTES int SHPRE()shmemx_get_next_thread(uint64_t caller_tid, void **next_thread);
+SHMEM_FUNCTION_ATTRIBUTES int SHPRE()shmemx_get_next_thread(void **next_thread);
 SHMEM_FUNCTION_ATTRIBUTES void SHPRE()shmemx_thread_scheduler_init(uint64_t num_threads);
 SHMEM_FUNCTION_ATTRIBUTES void SHPRE()shmemx_thread_scheduler_finalize(void);
 SHMEM_FUNCTION_ATTRIBUTES void SHPRE()shmemx_thread_unregister(void);

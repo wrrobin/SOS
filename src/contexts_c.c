@@ -89,9 +89,9 @@ shmemx_register_get_thread_handle(void* (*get_thread_handle_fn)(void))
 }
 
 int SHMEM_FUNCTION_ATTRIBUTES
-shmemx_get_next_thread(uint64_t caller_tid, void **next_thread)
+shmemx_get_next_thread(void **next_thread)
 {
-    int ret = shmem_internal_get_next_thread(caller_tid, next_thread);
+    int ret = shmem_internal_get_next_thread(next_thread);
     return ret;
 }
 
