@@ -82,6 +82,13 @@ shmemx_register_yield(void (*yield_fn)(int))
 }
 
 void SHMEM_FUNCTION_ATTRIBUTES
+shmemx_register_getultinfo(void (*getultinfo_fn)(int *, uint64_t *))
+{
+    shmem_internal_register_getultinfo(getultinfo_fn);
+    return;
+}
+
+void SHMEM_FUNCTION_ATTRIBUTES
 shmemx_register_get_thread_handle(void* (*get_thread_handle_fn)(void))
 {
     shmem_internal_register_get_thread_handle(get_thread_handle_fn);
@@ -96,9 +103,9 @@ shmemx_get_next_thread(void **next_thread)
 }
 
 void SHMEM_FUNCTION_ATTRIBUTES
-shmemx_thread_scheduler_init(uint64_t num_threads)
+shmemx_thread_scheduler_init(uint64_t num_hw_threads, uint64_t num_ul_threads)
 {
-    shmem_internal_thread_scheduler_init(num_threads);
+    shmem_internal_thread_scheduler_init(num_hw_threads, num_ul_threads);
     return;
 }
 
@@ -116,43 +123,3 @@ shmemx_thread_unregister(void)
     return;
 }
 
-/*SHMEM_FUNCTION_ATTRIBUTES int 
-shmem_create_fibers(int count, int yield_policy)
-{
-    SHMEM_ERR_CHECK_INITIALIZED();
-
-    int ret = create_fibers(count, yield_policy);
-
-    return ret;
-}
-
-SHMEM_FUNCTION_ATTRIBUTES int
-shmem_init_fiber(int fiber_index, void (*thread_func)(int, int), int arg1,
-                  int arg2)
-{
-    SHMEM_ERR_CHECK_INITIALIZED();
-
-    int ret = init_fiber(fiber_index, thread_func, arg1, arg2);
-
-    return ret;
-}
-
-SHMEM_FUNCTION_ATTRIBUTES int
-shmem_start_fiber(int fiber_index)
-{
-    SHMEM_ERR_CHECK_INITIALIZED();
-
-    int ret = start_fiber(fiber_index);
-
-    return ret;
-}
-
-SHMEM_FUNCTION_ATTRIBUTES int
-shmem_fiber_yield(void)
-{
-    SHMEM_ERR_CHECK_INITIALIZED();
-
-    int ret = fiber_yield();
-
-    return ret;
-}*/

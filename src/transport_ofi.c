@@ -95,8 +95,7 @@ fi_addr_t                       *addr_table;
 shmem_internal_mutex_t          shmem_transport_ofi_lock;
 pthread_mutex_t                 shmem_transport_ofi_progress_lock = PTHREAD_MUTEX_INITIALIZER;
 #endif /* ENABLE_THREADS */
-
-int 				ult_scheduling_mode;
+long 				ult_scheduling_mode;
 
 /* Need a syscall to gettid() because glibc doesn't provide a wrapper
  * (see gettid manpage in the NOTES section): */

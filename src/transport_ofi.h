@@ -64,7 +64,7 @@ extern long                             shmem_transport_ofi_max_bounce_buffers;
 
 extern pthread_mutex_t                  shmem_transport_ofi_progress_lock;
 
-extern int				ult_scheduling_mode; 
+extern long				ult_scheduling_mode; 
 
 static int 				blind_yield_pq = -1;
 static int 				blind_yield_gw = -1;

@@ -18,6 +18,7 @@
 uint64_t (*shmem_internal_gettid_fn)(void) = NULL;
 void (*shmem_internal_yield_fn)(int) = NULL;
 void* (*shmem_internal_get_thread_handle_fn)(void) = NULL;
+void (*shmem_internal_getultinfo_fn)(int *, uint64_t *) = NULL;
 
 void shmem_internal_register_gettid(uint64_t (*gettid_fn)(void))
 {
@@ -33,3 +34,9 @@ void shmem_internal_register_get_thread_handle(void* (*get_thread_handle_fn)(voi
 {
     shmem_internal_get_thread_handle_fn = get_thread_handle_fn;
 }
+
+void shmem_internal_register_getultinfo(void (*getultinfo_fn)(int *, uint64_t *))
+{
+    shmem_internal_getultinfo_fn = getultinfo_fn;
+}
+
