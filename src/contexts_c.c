@@ -103,9 +103,9 @@ shmemx_get_next_thread(void **next_thread)
 }
 
 void SHMEM_FUNCTION_ATTRIBUTES
-shmemx_thread_scheduler_init(uint64_t num_hw_threads, uint64_t num_ul_threads)
+shmemx_thread_scheduler_init(uint64_t num_hw_threads, uint64_t num_ul_threads, int *priority_list)
 {
-    shmem_internal_thread_scheduler_init(num_hw_threads, num_ul_threads);
+    shmem_internal_thread_scheduler_init(num_hw_threads, num_ul_threads, priority_list);
     return;
 }
 
@@ -113,6 +113,13 @@ void SHMEM_FUNCTION_ATTRIBUTES
 shmemx_thread_scheduler_finalize(void)
 {
     shmem_internal_thread_scheduler_finalize();
+    return;
+}
+
+void SHMEM_FUNCTION_ATTRIBUTES
+shmemx_thread_register(void)
+{
+    shmem_internal_thread_scheduler_register();
     return;
 }
 

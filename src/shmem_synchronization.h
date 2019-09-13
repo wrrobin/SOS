@@ -84,10 +84,9 @@ shmem_internal_fence(shmem_ctx_t ctx)
     do {                                                 \
         while (*(var) == value) {                        \
             shmem_transport_probe();                     \
-            /*if (SHMEM_CHECK_USER_YIELD_FN_EXISTS) {      \
+            if (SHMEM_CHECK_USER_YIELD_FN_EXISTS) {      \
                 if (ult_scheduling_mode) {               \
-                    shmem_internal_add_to_thread_queue(NULL, 100, 0, 0); \
-                    int ret = shmem_internal_runnable_thread_exists(); \
+                    int ret = shmem_internal_runnable_thread_exists(NULL, 2, (long *) var, -1, value); \
                     if (ret >= 0)                            \
                         shmem_internal_yield_fn(0);          \
                     else                                     \
@@ -96,7 +95,7 @@ shmem_internal_fence(shmem_ctx_t ctx)
                     shmem_internal_yield_fn(-1);         \
                 }                                        \
             }                                            \
-            else */                                        \
+            else                                         \
                 SPINLOCK_BODY();                         \
         }                                                \
     } while(0)
@@ -108,10 +107,9 @@ shmem_internal_fence(shmem_ctx_t ctx)
         COMP(cond, *(var), value, cmpret);               \
         while (!cmpret) {                                \
             shmem_transport_probe();                     \
-            /*if (SHMEM_CHECK_USER_YIELD_FN_EXISTS) {      \
+            if (SHMEM_CHECK_USER_YIELD_FN_EXISTS) {      \
                 if (ult_scheduling_mode) {               \
-                    shmem_internal_add_to_thread_queue(NULL, 100, 0, 0); \
-                    int ret = shmem_internal_runnable_thread_exists(); \
+                    int ret = shmem_internal_runnable_thread_exists(NULL, 2, (long *) var, cond, value); \
                     if (ret >= 0)                            \
                         shmem_internal_yield_fn(0);          \
                     else                                     \
@@ -120,7 +118,7 @@ shmem_internal_fence(shmem_ctx_t ctx)
                     shmem_internal_yield_fn(-1);         \
                 }                                        \
             }                                            \
-            else*/                                         \
+            else                                         \
                 SPINLOCK_BODY();                         \
             COMP(cond, *(var), value, cmpret);           \
         }                                                \

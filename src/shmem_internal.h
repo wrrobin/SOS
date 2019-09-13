@@ -483,12 +483,12 @@ extern void shmem_internal_register_yield(void (*yield_fn)(int));
 extern void shmem_internal_register_get_thread_handle(void* (*get_thread_handle_fn)(void));
 extern void shmem_internal_register_getultinfo(void (*getultinfo_fn)(int *, uint64_t *));
 
-extern void shmem_internal_thread_scheduler_init(uint64_t num_hw_threads, uint64_t num_ul_threads);
+extern void shmem_internal_thread_scheduler_init(uint64_t num_hw_threads, uint64_t num_ul_threads, int *priority_list);
 extern void shmem_internal_thread_scheduler_finalize(void);
-extern int shmem_internal_add_to_thread_queue(shmem_ctx_t *ctx, int reason, uint64_t cnt, uint64_t value);
 extern void shmem_internal_remove_from_thread_queue(void);
+extern void shmem_internal_thread_scheduler_register(void);
 extern int shmem_internal_get_next_thread(void **next_thread);
-extern int shmem_internal_runnable_thread_exists(void);
+extern int shmem_internal_runnable_thread_exists(shmem_ctx_t *ctx, int reason, long *var, int cond, long val);
 
 #define SHMEM_CHECK_USER_YIELD_FN_EXISTS (shmem_internal_yield_fn != NULL)
 

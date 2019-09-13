@@ -20,8 +20,7 @@
 typedef enum {
     BLOCKED_PUT,
     BLOCKED_GET,
-    BLOCKED_TARGET,
-    UNKNOWN
+    BLOCKED_WAIT
 } fiber_state;
 
 typedef enum {
@@ -36,10 +35,11 @@ typedef struct shmem_fiber_t {
     void *fiber_handle;
     shmem_ctx_t *attached_ctx;
     fiber_state fiber_blocked_reason;
-    uint64_t fiber_blocked_cnt;
-    uint64_t fiber_blocked_value;
     int is_waiting;
     int is_runnable;
+    long *wait_var;
+    int wait_cond;
+    long wait_val;
     struct shmem_fiber_t *next; 
 } shmem_fiber;
 
@@ -47,44 +47,47 @@ schedule_policy q_policy = POLICY_AUTO;
 static int thread_scheduler_initialized = 0;
 uint64_t total_threads;
 uint64_t num_shepherds;
+uint64_t threads_per_shepherd;
+int *thread_priority;
+static int vip_thread_state = -1;
+uint64_t *registered_threads;
 
 static shmem_fiber **pending_fiber_ll;
 uint64_t *pending_fiber_ll_size;
 
-static uint64_t **thread_attendance;
 static shmem_fiber** next_runnable;
-static int *are_all_threads_started;
 static uint64_t *current_runnable_thread_count;
 
 int log_verbose;
 
-void shmem_internal_thread_scheduler_init(uint64_t num_hw_threads, uint64_t num_ul_threads) {
+void shmem_internal_thread_scheduler_init(uint64_t num_hw_threads, uint64_t num_ul_threads, int *priority_list) {
+    if (!ult_scheduling_mode) return;
     log_verbose = shmem_internal_params.THREAD_SCHEDULE_VERBOSE;
 
     num_shepherds = num_hw_threads;
     total_threads = num_ul_threads;
+    threads_per_shepherd = num_ul_threads / num_hw_threads;
+    thread_priority = priority_list;
+    vip_thread_state = thread_priority[0] == 2 ? 0 : (thread_priority[1] == 2 ? 1 : (thread_priority[2] == 2 ? 2 : -1));
 
-    if (log_verbose && shmem_internal_my_pe == 0) fprintf(stderr, "Number of shepherds %lu, number of ults %lu\n", num_shepherds, total_threads);
+    if (log_verbose && shmem_internal_my_pe == 0) {
+        fprintf(stderr, "Number of shepherds %lu, number of ults %lu\n", num_shepherds, total_threads);
+        fprintf(stderr, "Thread priority set to: PUT: %d, GET: %d, WAIT: %d\n", thread_priority[0], thread_priority[1], thread_priority[2]);
+        fprintf(stderr, "The highest priority thread state is %d\n", vip_thread_state);
+    }
 
     pending_fiber_ll = (shmem_fiber **) calloc(num_shepherds, sizeof(shmem_fiber *));
     pending_fiber_ll_size = (uint64_t *) calloc(num_shepherds, sizeof(uint64_t));
 
-    thread_attendance = (uint64_t **) malloc(num_shepherds * sizeof(uint64_t *));
-    uint64_t thread_per_shepherd = total_threads / num_shepherds; // For now, must be divisible TODO: handle the unbalanced case
-    for (int i = 0; i < num_shepherds; i++) {
-        thread_attendance[i] = (uint64_t *) malloc(thread_per_shepherd * sizeof(uint64_t));
-        for (int j = 0; j < thread_per_shepherd; j++) 
-            thread_attendance[i][j] = INT_MAX;
-    }
-
     next_runnable = (shmem_fiber **) calloc(num_shepherds, sizeof(shmem_fiber *));
-    are_all_threads_started = (int *) calloc(num_shepherds, sizeof(int));
     current_runnable_thread_count = (uint64_t *) calloc(num_shepherds, sizeof(uint64_t));
+    registered_threads = (uint64_t *) calloc(num_shepherds, sizeof(uint64_t));
 
     thread_scheduler_initialized = 1;
 }
 
 void shmem_internal_thread_scheduler_finalize(void) {
+    if (!ult_scheduling_mode) return;
     thread_scheduler_initialized = 0;
 
     for (int i = 0; i < num_shepherds; i++) { 
@@ -92,18 +95,26 @@ void shmem_internal_thread_scheduler_finalize(void) {
             pending_fiber_ll[i] = NULL;
         if (next_runnable[i] != NULL)
             next_runnable[i] = NULL;
-        free(thread_attendance[i]);
     }
 
     free(pending_fiber_ll);
     free(pending_fiber_ll_size);
-    free(thread_attendance);
     free(next_runnable);
-    free(are_all_threads_started);
     free(current_runnable_thread_count);
+    free(registered_threads);
 
     num_shepherds = 0;
     total_threads = 0;
+}
+
+void shmem_internal_thread_scheduler_register(void) {
+    if (!ult_scheduling_mode) return;
+    uint64_t caller_tid;
+    int shepherd;
+    shmem_internal_getultinfo_fn(&shepherd, &caller_tid);
+
+    registered_threads[shepherd]++;
+    if (log_verbose && shmem_internal_my_pe == 0) fprintf(stderr, "Total registered threads %lu and attending threads %lu\n", registered_threads[shepherd], threads_per_shepherd);
 }
 
 static inline void append(int shepherd, shmem_fiber* temp) {
@@ -134,29 +145,9 @@ static inline void display_ll(int shepherd, uint64_t update, int op) {
     fflush(stderr);
 }
 
-static inline void check_thread_attendance(int shepherd, uint64_t tid) {
-    uint64_t thread_per_shepherd = total_threads / num_shepherds;
-    int j, already_exists = 0;
-
-    for (j = 0; j < thread_per_shepherd; j++) {
-        if (thread_attendance[shepherd][j] == tid) {
-            already_exists = 1;
-            break;
-        }
-        if (thread_attendance[shepherd][j] == INT_MAX) {
-            thread_attendance[shepherd][j] = tid;
-            break;
-        }
-    }
-
-    if (already_exists) return;
-    if (j == thread_per_shepherd - 1) 
-        are_all_threads_started[shepherd] = 1;
-}
-
-int shmem_internal_add_to_thread_queue(shmem_ctx_t *ctx, int reason, uint64_t cnt, uint64_t value) {
-    if (!thread_scheduler_initialized) return -1;
-    if (shmem_internal_get_thread_handle_fn == NULL || shmem_internal_getultinfo_fn == NULL) {
+static int shmem_internal_add_to_thread_queue(shmem_ctx_t *ctx, int reason, int shepherd, uint64_t tid, 
+                                              long *var, int cond, long value) {
+    if (shmem_internal_get_thread_handle_fn == NULL) {
         fprintf(stderr, "Unable to get thread handle as such function is " 
                         "not registered\n");
         return -1;
@@ -164,9 +155,6 @@ int shmem_internal_add_to_thread_queue(shmem_ctx_t *ctx, int reason, uint64_t cn
 
     if (q_policy == POLICY_NONE) { return -1; }
 
-    uint64_t tid; 
-    int shepherd; 
-    shmem_internal_getultinfo_fn(&shepherd, &tid); 
     int tid_exists = 0;
 
     shmem_fiber *temp = pending_fiber_ll[shepherd], *prev_temp = NULL;
@@ -174,8 +162,11 @@ int shmem_internal_add_to_thread_queue(shmem_ctx_t *ctx, int reason, uint64_t cn
         if (temp->thread_user_id == tid) {
             temp->attached_ctx = ctx;
             temp->fiber_blocked_reason = reason;
-            temp->fiber_blocked_cnt = cnt;
-            temp->fiber_blocked_value = value;
+            if (var != NULL) {
+                temp->wait_var = var;
+                temp->wait_cond = cond;
+                temp->wait_val = value;
+            }
             temp->is_waiting = 1;
             temp->is_runnable = 0;
             tid_exists = 1;
@@ -205,15 +196,17 @@ int shmem_internal_add_to_thread_queue(shmem_ctx_t *ctx, int reason, uint64_t cn
         temp->fiber_handle = shmem_internal_get_thread_handle_fn();
         temp->attached_ctx = ctx;
         temp->fiber_blocked_reason = reason;
-        temp->fiber_blocked_cnt = cnt;
-        temp->fiber_blocked_value = value;
+        if (var != NULL) {
+            temp->wait_var = var;
+            temp->wait_cond = cond;
+            temp->wait_val = value;
+        }
         temp->is_waiting = 1;
         temp->is_runnable = 0;
         temp->next = NULL;
 
         append(shepherd, temp);
 
-        if (!are_all_threads_started[shepherd]) check_thread_attendance(shepherd, tid);
         if (log_verbose && shmem_internal_my_pe == 0) display_ll(shepherd, tid, 0);
     } else {
         if (log_verbose && shmem_internal_my_pe == 0) display_ll(shepherd, tid, 2);
@@ -222,6 +215,7 @@ int shmem_internal_add_to_thread_queue(shmem_ctx_t *ctx, int reason, uint64_t cn
 }
 
 void shmem_internal_remove_from_thread_queue(void) {
+    if (!ult_scheduling_mode) return;
     if (shmem_internal_getultinfo_fn == NULL) {
         fprintf(stderr, "Unable to get thread id as such function is "
                         "not registered\n");
@@ -247,11 +241,38 @@ void shmem_internal_remove_from_thread_queue(void) {
         prev_ret = ret;
         ret = ret->next;
     }
-    if (!are_all_threads_started[shepherd]) check_thread_attendance(shepherd, tid);
     if (log_verbose && shmem_internal_my_pe == 0) display_ll(shepherd, tid, 1);
 }
 
-int shmem_internal_runnable_thread_exists(void) {
+#define COMP(type, a, b, ret)                            \
+    do {                                                 \
+        ret = 0;                                         \
+        switch (type) {                                  \
+        case SHMEM_CMP_EQ:                               \
+            if (a == b) ret = 1;                         \
+            break;                                       \
+        case SHMEM_CMP_NE:                               \
+            if (a != b) ret = 1;                         \
+            break;                                       \
+        case SHMEM_CMP_GT:                               \
+            if (a > b) ret = 1;                          \
+            break;                                       \
+        case SHMEM_CMP_GE:                               \
+            if (a >= b) ret = 1;                         \
+            break;                                       \
+        case SHMEM_CMP_LT:                               \
+            if (a < b) ret = 1;                          \
+            break;                                       \
+        case SHMEM_CMP_LE:                               \
+            if (a <= b) ret = 1;                         \
+            break;                                       \
+        default:                                         \
+            RAISE_ERROR(-1);                             \
+        }                                                \
+    } while(0)
+
+
+int shmem_internal_runnable_thread_exists(shmem_ctx_t *ctx, int reason, long *var, int cond, long value) {
     if (!thread_scheduler_initialized) return SCHEDULER_RET_CODE_UNINITIALIZED;
     if (shmem_internal_getultinfo_fn == NULL) {
         fprintf(stderr, "Unable to get thread id as such function is "
@@ -263,11 +284,14 @@ int shmem_internal_runnable_thread_exists(void) {
     int shepherd;
     shmem_internal_getultinfo_fn(&shepherd, &caller_tid);
 
+    if (thread_priority[reason] != 0)
+        shmem_internal_add_to_thread_queue(ctx, reason, shepherd, caller_tid, var, cond, value);
+
     if (pending_fiber_ll[shepherd] == NULL) {
         return SCHEDULER_RET_CODE_QUEUE_EMPTY;
     }
 
-    if (!are_all_threads_started[shepherd]) {
+    if (registered_threads[shepherd] != threads_per_shepherd) {
         return SCHEDULER_RET_CODE_ALL_THREADS_NOT_STARTED;
     }
 
@@ -275,12 +299,30 @@ int shmem_internal_runnable_thread_exists(void) {
     shmem_fiber *queue = pending_fiber_ll[shepherd];
 
     if (current_runnable_thread_count[shepherd] > 1) {
-        while (queue != NULL) {
-            if (queue->thread_user_id != caller_tid && queue->is_runnable == 1) {
-                next_runnable[shepherd] = queue;
-                return queue->thread_user_id;
+        if (vip_thread_state != -1) {
+            shmem_fiber *first_non_vip_runnable = NULL;
+            while (queue != NULL) {
+                if (queue->thread_user_id != caller_tid && queue->is_runnable == 1) {
+                    if (queue->fiber_blocked_reason == vip_thread_state) {
+                        next_runnable[shepherd] = queue;
+                        return queue->thread_user_id;
+                    } else {
+                        if (first_non_vip_runnable == NULL) 
+                            first_non_vip_runnable = queue;
+                    }
+                }
+                queue = queue->next;
             }
-            queue = queue->next;
+            next_runnable[shepherd] = first_non_vip_runnable;
+            return first_non_vip_runnable->thread_user_id;
+        } else {
+            while (queue != NULL) {
+                if (queue->thread_user_id != caller_tid && queue->is_runnable == 1) {
+                    next_runnable[shepherd] = queue;
+                    return queue->thread_user_id;
+                }
+                queue = queue->next;
+            }
         }
     }
 
@@ -305,6 +347,15 @@ int shmem_internal_runnable_thread_exists(void) {
                     next_runnable[shepherd] = queue;
                     if (ret_code == SCHEDULER_RET_CODE_NO_RUNNABLE_THREADS) ret_code = queue->thread_user_id;
                 }
+            } else if (queue->fiber_blocked_reason == BLOCKED_WAIT) {
+                int cmpret;
+                COMP(queue->wait_cond, *(queue->wait_var), queue->wait_val, cmpret);
+                if (cmpret) {
+                    queue->is_runnable = 1;
+                    current_runnable_thread_count[shepherd]++;
+                    next_runnable[shepherd] = queue;
+                    if (ret_code == SCHEDULER_RET_CODE_NO_RUNNABLE_THREADS) ret_code = queue->thread_user_id;
+                } 
             }
         }
         queue = queue->next;
@@ -329,7 +380,7 @@ int shmem_internal_get_next_thread(void **next_thread) {
         return SCHEDULER_RET_CODE_QUEUE_EMPTY;
     }
 
-    if (!are_all_threads_started[shepherd]) {
+    if (registered_threads[shepherd] != threads_per_shepherd) {
         return SCHEDULER_RET_CODE_ALL_THREADS_NOT_STARTED; 
     }
 

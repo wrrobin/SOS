@@ -32,8 +32,9 @@ SHMEM_FUNCTION_ATTRIBUTES void SHPRE()shmemx_register_yield(void (*yield_fn)(int
 SHMEM_FUNCTION_ATTRIBUTES void SHPRE()shmemx_register_getultinfo(void (*getultinfo_fn)(int *, uint64_t *));
 SHMEM_FUNCTION_ATTRIBUTES void SHPRE()shmemx_register_get_thread_handle(void* (*get_thread_handle_fn)(void));
 SHMEM_FUNCTION_ATTRIBUTES int SHPRE()shmemx_get_next_thread(void **next_thread);
-SHMEM_FUNCTION_ATTRIBUTES void SHPRE()shmemx_thread_scheduler_init(uint64_t num_hw_threads, uint64_t num_ul_threads);
+SHMEM_FUNCTION_ATTRIBUTES void SHPRE()shmemx_thread_scheduler_init(uint64_t num_hw_threads, uint64_t num_ul_threads, int *priority_list);
 SHMEM_FUNCTION_ATTRIBUTES void SHPRE()shmemx_thread_scheduler_finalize(void);
+SHMEM_FUNCTION_ATTRIBUTES void SHPRE()shmemx_thread_register(void);
 SHMEM_FUNCTION_ATTRIBUTES void SHPRE()shmemx_thread_unregister(void);
 
 /* Performance Counter Query Routines */

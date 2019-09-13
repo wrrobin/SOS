@@ -467,8 +467,8 @@ void shmem_transport_put_quiet(shmem_transport_ctx_t* ctx)
             SHMEM_TRANSPORT_OFI_CTX_UNLOCK(ctx);
             if (SHMEM_CHECK_USER_YIELD_FN_EXISTS) {
                 if (ult_scheduling_mode) {
-                    shmem_internal_add_to_thread_queue((shmem_ctx_t *) ctx, 0, cnt, success);
-                    int ret = shmem_internal_runnable_thread_exists();
+                    //shmem_internal_add_to_thread_queue((shmem_ctx_t *) ctx, 0, cnt, success);
+                    int ret = shmem_internal_runnable_thread_exists((shmem_ctx_t *) ctx, 0, NULL, 0, 0);
 
                     if (ret == SCHEDULER_RET_CODE_ALL_THREADS_NOT_STARTED) {
                         blind_yield_pq = 1; 
@@ -953,9 +953,9 @@ void shmem_transport_get_wait(shmem_transport_ctx_t* ctx)
             SHMEM_TRANSPORT_OFI_CTX_UNLOCK(ctx);
             if (SHMEM_CHECK_USER_YIELD_FN_EXISTS) {
                 if (ult_scheduling_mode) {
-                    shmem_internal_add_to_thread_queue((shmem_ctx_t *) ctx, 1, cnt, success);
+                    //shmem_internal_add_to_thread_queue((shmem_ctx_t *) ctx, 1, cnt, success);
                 
-                    int ret = shmem_internal_runnable_thread_exists();
+                    int ret = shmem_internal_runnable_thread_exists((shmem_ctx_t *) ctx, 1, NULL, 0, 0);
                     if (ret == SCHEDULER_RET_CODE_ALL_THREADS_NOT_STARTED) {
                         blind_yield_gw = 1;
                         shmem_internal_yield_fn(-1);
