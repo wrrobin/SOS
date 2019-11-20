@@ -43,7 +43,7 @@ typedef struct shmem_fiber_t {
     struct shmem_fiber_t *next; 
 } shmem_fiber;
 
-schedule_policy q_policy = POLICY_AUTO;
+schedule_policy q_policy;
 static int thread_scheduler_initialized = 0;
 uint64_t total_threads;
 uint64_t num_shepherds;
@@ -60,9 +60,14 @@ static uint64_t *current_runnable_thread_count;
 
 int log_verbose;
 
+static inline int get_random_number(int min, int max){
+   return min + rand() / (RAND_MAX / (max - min + 1) + 1);
+}
+
 void shmem_internal_thread_scheduler_init(uint64_t num_hw_threads, uint64_t num_ul_threads, int *priority_list) {
     if (!ult_scheduling_mode) return;
     log_verbose = shmem_internal_params.THREAD_SCHEDULE_VERBOSE;
+    q_policy = shmem_internal_params.THREAD_SCHEDULE_POLICY;
 
     num_shepherds = num_hw_threads;
     total_threads = num_ul_threads;
@@ -298,67 +303,75 @@ int shmem_internal_runnable_thread_exists(shmem_ctx_t *ctx, int reason, long *va
     int ret_code = SCHEDULER_RET_CODE_NO_RUNNABLE_THREADS;
     shmem_fiber *queue = pending_fiber_ll[shepherd];
 
-    if (current_runnable_thread_count[shepherd] > 1) {
-        if (vip_thread_state != -1) {
-            shmem_fiber *first_non_vip_runnable = NULL;
-            while (queue != NULL) {
-                if (queue->thread_user_id != caller_tid && queue->is_runnable == 1) {
-                    if (queue->fiber_blocked_reason == vip_thread_state) {
+    if (q_policy == POLICY_AUTO) {
+        if (current_runnable_thread_count[shepherd] > 1) {
+            if (vip_thread_state != -1) {
+                shmem_fiber *first_non_vip_runnable = NULL;
+                while (queue != NULL) {
+                    if (queue->thread_user_id != caller_tid && queue->is_runnable == 1) {
+                        if (queue->fiber_blocked_reason == vip_thread_state) {
+                            next_runnable[shepherd] = queue;
+                            return queue->thread_user_id;
+                        } else {
+                            if (first_non_vip_runnable == NULL) 
+                                first_non_vip_runnable = queue;
+                        }
+                    }
+                    queue = queue->next;
+                }
+                if (first_non_vip_runnable) {
+                    next_runnable[shepherd] = first_non_vip_runnable;
+                    return first_non_vip_runnable->thread_user_id;
+                }
+            } else {
+                while (queue != NULL) {
+                    if (queue->thread_user_id != caller_tid && queue->is_runnable == 1) {
                         next_runnable[shepherd] = queue;
                         return queue->thread_user_id;
-                    } else {
-                        if (first_non_vip_runnable == NULL) 
-                            first_non_vip_runnable = queue;
                     }
+                    queue = queue->next;
                 }
-                queue = queue->next;
-            }
-            next_runnable[shepherd] = first_non_vip_runnable;
-            return first_non_vip_runnable->thread_user_id;
-        } else {
-            while (queue != NULL) {
-                if (queue->thread_user_id != caller_tid && queue->is_runnable == 1) {
-                    next_runnable[shepherd] = queue;
-                    return queue->thread_user_id;
-                }
-                queue = queue->next;
             }
         }
-    }
 
-    current_runnable_thread_count[shepherd] = 0;
-    while (queue != NULL) {
-        if (queue->thread_user_id != caller_tid && queue->is_waiting == 1) {
-            if (queue->fiber_blocked_reason == BLOCKED_PUT) {
-                uint64_t c_cntr_val = shmem_transport_pcntr_get_completed_write((shmem_transport_ctx_t *) queue->attached_ctx);
-                uint64_t p_cntr_val = shmem_transport_pcntr_get_issued_write((shmem_transport_ctx_t *) queue->attached_ctx);
-                if (c_cntr_val == p_cntr_val) {
-                    queue->is_runnable = 1;
-                    current_runnable_thread_count[shepherd]++;
-                    next_runnable[shepherd] = queue;
-                    if (ret_code == SCHEDULER_RET_CODE_NO_RUNNABLE_THREADS) ret_code = queue->thread_user_id;
+        current_runnable_thread_count[shepherd] = 0;
+        while (queue != NULL) {
+            if (queue->thread_user_id != caller_tid && queue->is_waiting == 1) {
+                if (queue->fiber_blocked_reason == BLOCKED_PUT) {
+                    uint64_t c_cntr_val = shmem_transport_pcntr_get_completed_write((shmem_transport_ctx_t *) queue->attached_ctx);
+                    uint64_t p_cntr_val = shmem_transport_pcntr_get_issued_write((shmem_transport_ctx_t *) queue->attached_ctx);
+                    if (c_cntr_val == p_cntr_val) {
+                        queue->is_runnable = 1;
+                        current_runnable_thread_count[shepherd]++;
+                        next_runnable[shepherd] = queue;
+                        if (ret_code == SCHEDULER_RET_CODE_NO_RUNNABLE_THREADS) ret_code = queue->thread_user_id;
+                    }
+                } else if (queue->fiber_blocked_reason == BLOCKED_GET) {
+                    uint64_t c_cntr_val = shmem_transport_pcntr_get_completed_read((shmem_transport_ctx_t *) queue->attached_ctx);
+                    uint64_t p_cntr_val = shmem_transport_pcntr_get_issued_read((shmem_transport_ctx_t *) queue->attached_ctx);
+                    if (c_cntr_val == p_cntr_val) {
+                        queue->is_runnable = 1;
+                        current_runnable_thread_count[shepherd]++;
+                        next_runnable[shepherd] = queue;
+                        if (ret_code == SCHEDULER_RET_CODE_NO_RUNNABLE_THREADS) ret_code = queue->thread_user_id;
+                    }
+                } else if (queue->fiber_blocked_reason == BLOCKED_WAIT) {
+                    int cmpret;
+                    COMP(queue->wait_cond, *(queue->wait_var), queue->wait_val, cmpret);
+                    if (cmpret) {
+                        queue->is_runnable = 1;
+                        current_runnable_thread_count[shepherd]++;
+                        next_runnable[shepherd] = queue;
+                        if (ret_code == SCHEDULER_RET_CODE_NO_RUNNABLE_THREADS) ret_code = queue->thread_user_id;
+                    } 
                 }
-            } else if (queue->fiber_blocked_reason == BLOCKED_GET) {
-                uint64_t c_cntr_val = shmem_transport_pcntr_get_completed_read((shmem_transport_ctx_t *) queue->attached_ctx);
-                uint64_t p_cntr_val = shmem_transport_pcntr_get_issued_read((shmem_transport_ctx_t *) queue->attached_ctx);
-                if (c_cntr_val == p_cntr_val) {
-                    queue->is_runnable = 1;
-                    current_runnable_thread_count[shepherd]++;
-                    next_runnable[shepherd] = queue;
-                    if (ret_code == SCHEDULER_RET_CODE_NO_RUNNABLE_THREADS) ret_code = queue->thread_user_id;
-                }
-            } else if (queue->fiber_blocked_reason == BLOCKED_WAIT) {
-                int cmpret;
-                COMP(queue->wait_cond, *(queue->wait_var), queue->wait_val, cmpret);
-                if (cmpret) {
-                    queue->is_runnable = 1;
-                    current_runnable_thread_count[shepherd]++;
-                    next_runnable[shepherd] = queue;
-                    if (ret_code == SCHEDULER_RET_CODE_NO_RUNNABLE_THREADS) ret_code = queue->thread_user_id;
-                } 
             }
+            queue = queue->next;
         }
-        queue = queue->next;
+    } else if (q_policy == POLICY_FIFO || q_policy == POLICY_RANDOM) {
+        if (pending_fiber_ll_size[shepherd] > 1) {
+            return pending_fiber_ll[shepherd]->thread_user_id;
+        }
     }
     return ret_code;
 }
@@ -387,30 +400,48 @@ int shmem_internal_get_next_thread(void **next_thread) {
     int ret_code = SCHEDULER_RET_CODE_NO_RUNNABLE_THREADS;
     uint64_t ret_tid = 0;
 
-    if (next_runnable[shepherd] != NULL) {
-        *next_thread = next_runnable[shepherd]->fiber_handle;
-        ret_tid = next_runnable[shepherd]->thread_user_id;
-        next_runnable[shepherd]->is_waiting = 0;
-        next_runnable[shepherd]->is_runnable = 0;
-        current_runnable_thread_count[shepherd]--;
-        ret_code = ret_tid; 
-        if (log_verbose && shmem_internal_my_pe == 0) display_ll(shepherd, ret_tid, 3);
-        return ret_code;
-    }
-
-    shmem_fiber *ret = pending_fiber_ll[shepherd];
-
-    while (ret != NULL) {
-        if (ret->is_runnable == 1 && ret->thread_user_id != caller_tid) {
-            *next_thread = ret->fiber_handle;
-            ret_tid = ret->thread_user_id;
-            ret->is_waiting = 0;
-            ret->is_runnable = 0;
+    if (q_policy == POLICY_AUTO) {
+        if (next_runnable[shepherd] != NULL) {
+            *next_thread = next_runnable[shepherd]->fiber_handle;
+            ret_tid = next_runnable[shepherd]->thread_user_id;
+            next_runnable[shepherd]->is_waiting = 0;
+            next_runnable[shepherd]->is_runnable = 0;
             current_runnable_thread_count[shepherd]--;
-            ret_code = ret_tid;
-            break;
+            ret_code = ret_tid; 
+            if (log_verbose && shmem_internal_my_pe == 0) display_ll(shepherd, ret_tid, 3);
+            return ret_code;
         }
-        ret = ret->next;
+
+        shmem_fiber *ret = pending_fiber_ll[shepherd];
+
+        while (ret != NULL) {
+            if (ret->is_runnable == 1 && ret->thread_user_id != caller_tid) {
+                *next_thread = ret->fiber_handle;
+                ret_tid = ret->thread_user_id;
+                ret->is_waiting = 0;
+                ret->is_runnable = 0;
+                current_runnable_thread_count[shepherd]--;
+                ret_code = ret_tid;
+                break;
+            }
+            ret = ret->next;
+        }
+    } else if (q_policy == POLICY_FIFO) {
+        shmem_fiber *queue = pending_fiber_ll[shepherd];
+        if (queue->next != NULL) {
+            return queue->thread_user_id;
+        }
+    } else if (q_policy == POLICY_RANDOM) {
+        srand(time(0));
+        int rand_number = get_random_number(0, pending_fiber_ll_size[shepherd] - 1);
+ 
+        shmem_fiber *queue = pending_fiber_ll[shepherd];
+        while (queue != NULL) {
+            if (rand_number == 0)
+                return queue->thread_user_id;
+            rand_number--;
+            queue = queue->next;
+        }
     }
 
     if (log_verbose && shmem_internal_my_pe == 0) display_ll(shepherd, ret_tid, 3);
