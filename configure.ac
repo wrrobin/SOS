@@ -418,6 +418,20 @@ if test "$enable_shr_atomics" != "no" -a "$transport_xpmem" = "yes" -a "$transpo
     AC_DEFINE([USE_SHR_ATOMICS], [1], [If defined, the shared memory layer will perform processor atomics.])
 fi
 
+CHECK_CUDA(
+    [accelerator_cuda="yes"],
+    [accelerator_cuda="no"])
+
+if test -n "$with_cuda" -a "$with_cuda" != "no" ; then
+    accelerator_cuda="yes"
+    AC_DEFINE([USE_CUDA], [1], [Define if CUDA is present and requested])
+else
+    accelerator_cuda="no"
+fi
+
+AM_CONDITIONAL([USE_CUDA], [test "$accelerator_cuda" = "yes"])
+
+
 AC_ARG_ENABLE([pmi-simple], [AC_HELP_STRING([--enable-pmi-simple],
               [Use MPICH simple PMI-1 library for process management])])
 AC_ARG_ENABLE([pmi-mpi], [AC_HELP_STRING([--enable-pmi-mpi],
@@ -750,6 +764,9 @@ fi
 if test -n "$with_pmi" -a "$with_pmi" != "no" -a "$with_pmi" != "yes" ; then
   DISTCHECK_CONFIGURE_FLAGS="$DISTCHECK_CONFIGURE_FLAGS --with-pmi=${with_pmi}"
 fi
+if test -n "$with_cuda" -a "$with_cuda" != "no" -a "$with_cuda" != "yes" ; then
+  DISTCHECK_CONFIGURE_FLAGS="$DISTCHECK_CONFIGURE_FLAGS --with-cuda=${with_cuda}"
+fi
 if test "$enable_pmi_simple" = "yes" ; then
   DISTCHECK_CONFIGURE_FLAGS="$DISTCHECK_CONFIGURE_FLAGS --enable-pmi-simple"
 fi
@@ -793,6 +810,14 @@ if test "$transport_xpmem" = "yes" ; then
     LIBS="$LIBS $XPMEM_LIBS"
     WRAPPER_COMPILER_EXTRA_LDFLAGS="$XPMEM_LDFLAGS"
     WRAPPER_COMPILER_EXTRA_LIBS="$XPMEM_LIBS"
+fi
+
+if test "$accelerator_cuda" = "yes" ; then
+    CPPFLAGS="$CPPFLAGS $CUDA_CPPFLAGS"
+    LDFLAGS="$LDFLAGS $CUDA_LDFLAGS"
+    LIBS="$LIBS $CUDA_LIBS"
+    WRAPPER_COMPILER_EXTRA_LDFLAGS="$CUDA_LDFLAGS"
+    WRAPPER_COMPILER_EXTRA_LIBS="$CUDA_LIBS"
 fi
 
 CPPFLAGS="$CPPFLAGS $pmi_CPPFLAGS"
@@ -879,6 +904,9 @@ echo ""
 echo "Transports:"
 echo "  Portals 4:      $transport_portals4"
 echo "  OFI:            $transport_ofi"
+echo ""
+echo "Accelerators:"
+echo "  CUDA:           $accelerator_cuda"
 echo ""
 echo "On Node Communication:"
 echo "  XPMEM:          $transport_xpmem"

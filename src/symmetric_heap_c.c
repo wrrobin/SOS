@@ -23,6 +23,7 @@
 #include <fcntl.h>
 #include <inttypes.h>
 #include <errno.h>
+#include <malloc.h>
 #ifdef __linux__
 #include <mntent.h>
 #include <sys/vfs.h>
@@ -152,7 +153,7 @@ shmem_internal_get_next(intptr_t incr)
 #define CEILING(a,b)    ((uint64_t)(a) <= 0LL ? 0 : (FLOOR((a)-1,b) + (b)))
 #endif
 
-
+#ifndef USE_CUDA
 /* alloc VM space starting @ '_end' + 1GB */
 #define ONEGIG (1024UL*1024UL*1024UL)
 static void *mmap_alloc(size_t bytes)
@@ -222,7 +223,7 @@ static void *mmap_alloc(size_t bytes)
     }
     return ret;
 }
-
+#endif /* !USE_CUDA */
 
 int
 shmem_internal_symmetric_init(void)
@@ -230,6 +231,11 @@ shmem_internal_symmetric_init(void)
     /* add library overhead such that the max can be shmalloc()'ed */
     shmem_internal_heap_length = shmem_internal_params.SYMMETRIC_SIZE +
                                  SHMEM_INTERNAL_HEAP_OVERHEAD;
+
+#ifdef USE_CUDA
+    CU_CHECK(cudaMallocHost(&shmem_internal_heap_base, shmem_internal_heap_length));
+    shmem_internal_heap_curr = shmem_internal_heap_base;
+#else
 
     if (!shmem_internal_params.SYMMETRIC_HEAP_USE_MALLOC) {
         shmem_internal_heap_base =
@@ -240,7 +246,7 @@ shmem_internal_symmetric_init(void)
             shmem_internal_heap_curr =
             malloc(shmem_internal_heap_length);
     }
-
+#endif
     return (NULL == shmem_internal_heap_base) ? -1 : 0;
 }
 
@@ -249,6 +255,11 @@ int
 shmem_internal_symmetric_fini(void)
 {
     if (NULL != shmem_internal_heap_base) {
+#ifdef USE_CUDA
+        CU_CHECK(cudaFreeHost(shmem_internal_heap_base));
+        shmem_internal_heap_length = 0;
+        shmem_internal_heap_base = shmem_internal_heap_curr = NULL;
+#else
         if (!shmem_internal_params.SYMMETRIC_HEAP_USE_MALLOC) {
             munmap( (void*)shmem_internal_heap_base, (size_t)shmem_internal_heap_length );
         } else {
@@ -256,8 +267,8 @@ shmem_internal_symmetric_fini(void)
         }
         shmem_internal_heap_length = 0;
         shmem_internal_heap_base = shmem_internal_heap_curr = NULL;
+#endif
     }
-
     return 0;
 }
 

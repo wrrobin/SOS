@@ -53,6 +53,21 @@ extern unsigned int shmem_internal_rand_seed;
 #define RAISE_PREINIT_PREFIX "[????]        "
 #define RAISE_PREFIX         "              "
 
+#ifdef USE_CUDA
+#include <cuda_runtime.h>
+#include <cuda.h>
+
+#define CU_CHECK(call)                                                  \
+    do {                                                                \
+        cudaError_t status = call;                                      \
+        if (status != cudaSuccess) {                                    \
+            printf("CUDA FAIL: call='%s'. Reason:%s\n", #call,          \
+                   cudaGetErrorString(status));                         \
+            shmem_runtime_abort(1, PACKAGE_NAME " exited in error");    \
+        }                                                               \
+    } while (0)
+
+#endif
 
 #define RAISE_WARN(ret)                                                 \
     do {                                                                \
