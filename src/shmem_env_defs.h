@@ -117,3 +117,7 @@ SHMEM_INTERNAL_ENV_DEF(MPI_THREAD_LEVEL, string, "MPI_THREAD_SINGLE", SHMEM_INTE
 SHMEM_INTERNAL_ENV_DEF(BACKTRACE, string, "", SHMEM_INTERNAL_ENV_CAT_OTHER,
                        "Specify the mechanism to use for backtracing on failure")
 
+#ifdef USE_CUDA
+SHMEM_INTERNAL_ENV_DEF(DEV_SYMMETRIC_HEAP, long, 0, SHMEM_INTERNAL_ENV_CAT_OTHER,
+                       "Employs host or device memory allocation API for CUDA")
+#endif
