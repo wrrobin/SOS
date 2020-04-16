@@ -1,0 +1,17 @@
+Temporary file for instructions on compiling and running experiments 
+with CPU and GPU symmetric heaps.
+
+Compile:
+--------
+1. Export CUDA toolkit installation directory and add it to the system environment.
+2. Run the following command to compile:
+
+nvcc multi_sym_heap.cu -o multi_sym_heap -I<SOS install>/include -L<SOS install>/lib -lsma -lpmi_simple
+
+Example Run:
+------------
+1. To allocate symmetric heap with cudaMallocHost:
+SHMEM_DEV_SYMMETRIC_HEAP=-1 oshrun -n 4 ./multi_sym_heap
+2. To allocate symmetric heap with cudaMallocManaged:
+SHMEM_DEV_SYMMETRIC_HEAP=0 oshrun -n 4 ./multi_sym_heap
+
