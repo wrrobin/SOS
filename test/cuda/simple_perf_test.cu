@@ -1,0 +1,100 @@
+#include <stdio.h>
+#include <shmem.h>
+
+#define MIN_MSG_SZ (1<<0)
+#define MAX_MSG_SZ (1<<20)
+#define NUM_ITER 100
+#define WARMUP 10
+
+__global__
+void init_data(int n, int *x, int *y, int value)
+{
+  int index = blockIdx.x * blockDim.x + threadIdx.x;
+  int stride = blockDim.x * gridDim.x;
+  for (int i = index; i < n; i += stride) {
+    x[i] = value;
+    y[i] = value + 1;
+  }
+}
+
+double get_wtime(void)
+{
+    double wtime = 0.0;
+
+#ifdef CLOCK_MONOTONIC
+    struct timespec tv;
+    clock_gettime(CLOCK_MONOTONIC, &tv);
+    wtime = tv.tv_sec * 1e6;
+    wtime += (double)tv.tv_nsec / 1000.0;
+#else
+    struct timeval tv;
+    gettimeofday(&tv, NULL);
+    wtime = tv.tv_sec * 1e6;
+    wtime += (double)tv.tv_usec;
+#endif
+    return wtime;
+}
+
+int main(int argc, char *argv[]) {
+  int exitcode = 0;
+  int *a, *b;
+  int msg_size, i;
+  double start_time = 0.0, end_time = 0.0;
+
+  shmem_init();
+  int me = shmem_my_pe();
+  int npes = shmem_n_pes();
+
+  if (me == 0) {
+#ifdef USE_DEVICE
+    fprintf(stderr, "Device initialization test\n");
+#else
+    fprintf(stderr, "Host initialization test\n");
+#endif
+  }
+
+  a = (int *) shmem_malloc(MAX_MSG_SZ * sizeof(int));
+  cudaMallocManaged(&b, MAX_MSG_SZ * sizeof(int));
+
+  for (msg_size = MIN_MSG_SZ; msg_size <= MAX_MSG_SZ; msg_size *= 2) {
+    for (i = 0; i < (NUM_ITER + WARMUP); i++) {
+      shmem_barrier_all();
+      if (i == WARMUP && me == 0) start_time = get_wtime();
+#ifdef USE_DEVICE
+      int block_size = 256;
+      int num_blocks = (msg_size + block_size - 1) / block_size;
+      init_data<<<num_blocks, block_size>>>(msg_size, a, b, i);
+      cudaDeviceSynchronize();
+#else
+      int j;
+      for (j = 0; j < msg_size; j++) {
+        a[j] = i;
+        b[j] = i + 1;
+      }
+#endif
+      shmem_barrier_all();
+      shmem_int_put(a, b, msg_size, (me + 1) % npes);
+    }
+    if (me == 0) end_time = get_wtime();
+    shmem_barrier_all();
+
+    if (me == 0) fprintf(stderr, "%10d%10s%10.2f\n", msg_size, " ", (double)((end_time - start_time) / NUM_ITER));
+
+    for (i = 0; i < msg_size; i++) {
+      if (a[i] != b[i]) {
+        fprintf(stderr, "[PE %d] ERROR: expected %d, found %d\n",
+                        me, b[i], a[i]);
+        exitcode = 1;
+        break;
+      }
+    }
+
+    if (exitcode) break;
+  }
+
+  shmem_free(a);
+  cudaFree(b);
+  shmem_finalize();
+
+  return exitcode;
+}
