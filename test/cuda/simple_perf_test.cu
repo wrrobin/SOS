@@ -7,6 +7,7 @@
 #define NUM_ITER 100
 #define WARMUP 10
 
+#ifdef USE_DEVICE_INIT
 __global__
 void init_data(int n, int *x, int *y, int value)
 {
@@ -14,9 +15,10 @@ void init_data(int n, int *x, int *y, int value)
   int stride = blockDim.x * gridDim.x;
   for (int i = index; i < n; i += stride) {
     x[i] = value * value + value;
-    y[i] = value * value + value + 1;
+    y[i] = value * value - value;
   }
 }
+#endif
 
 #ifdef USE_RDTSC
 static inline uint64_t rdtsc()
@@ -34,7 +36,7 @@ static inline double GetGHzFreq()
   return (double)(endTime - startTime) / 1.0e9;
 }
 #else
-double wtime(void)
+static inline double wtime(void)
 {
   double wtime = 0.0;
 
@@ -55,7 +57,7 @@ double wtime(void)
 
 double get_time() {
 #ifdef USE_RDTSC
-  return rdtsc();
+  return (double) rdtsc();
 #else
   return wtime();
 #endif
@@ -75,15 +77,24 @@ int main(int argc, char *argv[]) {
   int npes = shmem_n_pes();
 
   if (me == 0) {
-#ifdef USE_DEVICE
-    fprintf(stderr, "Device initialization test\n");
+#ifdef USE_CUDA
+#  ifdef USE_DEVICE_INIT
+    fprintf(stderr, "Device initialization test with CUDA malloc\n");
+#  else
+    fprintf(stderr, "Host initialization test with CUDA malloc\n");
+#  endif
 #else
-    fprintf(stderr, "Host initialization test\n");
+    fprintf(stderr, "Host initialization test with malloc\n");
 #endif
   }
 
   a = (int *) shmem_malloc(MAX_MSG_SZ * sizeof(int));
+#ifdef USE_CUDA
   cudaMallocManaged(&b, MAX_MSG_SZ * sizeof(int));
+  //cudaMallocHost(&b, MAX_MSG_SZ * sizeof(int));
+#else
+  b = (int *) malloc(MAX_MSG_SZ * sizeof(int));
+#endif
 
 #ifdef USE_RDTSC
   double freq = GetGHzFreq();
@@ -96,23 +107,23 @@ int main(int argc, char *argv[]) {
     for (i = 0; i < (NUM_ITER + WARMUP); i++) {
       shmem_barrier_all();
       if (i == WARMUP && me == 0) start_time = get_time();
-#ifdef USE_DEVICE
-      int block_size = 256;
-      int num_blocks = (msg_size + block_size - 1) / block_size;
-      init_data<<<num_blocks, block_size>>>(msg_size, a, b, i);
-#ifdef PROFILE
-      if (me == 0) profile_start = get_time();
-#endif
-      cudaDeviceSynchronize();
-#ifdef PROFILE
-      if (me == 0) profile_time += (get_time() - profile_start);
-#endif
-#else
+#if !defined(USE_CUDA) || (defined(USE_CUDA) && !defined(USE_DEVICE_INIT))
       int j;
       for (j = 0; j < msg_size; j++) {
         a[j] = i * i + i;
-        b[j] = i * i + i + 1;
+        b[j] = i * i - i;
       }
+#else
+      int block_size = 256;
+      int num_blocks = (msg_size + block_size - 1) / block_size;
+#  ifdef PROFILE
+      if (me == 0) profile_start = get_time();
+#  endif
+      init_data<<<num_blocks, block_size>>>(msg_size, a, b, i);
+      cudaDeviceSynchronize();
+#  ifdef PROFILE
+      if (me == 0) profile_time += (get_time() - profile_start);
+#  endif
 #endif
       shmem_barrier_all();
       shmem_int_put(a, b, msg_size, (me + 1) % npes);
@@ -124,22 +135,22 @@ int main(int argc, char *argv[]) {
     if (me == 0) { 
       fprintf(stderr, "%10d%10s%10.2f", msg_size, " ", 
               (double)((end_time - start_time) / ((double) NUM_ITER * freq * 1.0e3)));
-#ifdef PROFILE
+#  ifdef PROFILE
       fprintf(stderr, "%10s%10.2f\n", " ", 
               (double)(profile_time / ((double) NUM_ITER * freq * 1.0e3)));
-#else
+#  else
       fprintf(stderr, "\n");
-#endif
+#  endif
     }
 #else
     if (me == 0) { 
       fprintf(stderr, "%10d%10s%10.2f", msg_size, " ", 
               (double)((end_time - start_time) / NUM_ITER));
-#ifdef PROFILE
+#  ifdef PROFILE
       fprintf(stderr, "%10s%10.2f\n", " ", (double)(profile_time / NUM_ITER));
-#else
+#  else
       fprintf(stderr, "\n");
-#endif
+#  endif
     }
 #endif
 
@@ -156,7 +167,12 @@ int main(int argc, char *argv[]) {
   }
 
   shmem_free(a);
+#ifdef USE_CUDA
   cudaFree(b);
+  //cudaFreeHost(b);
+#else
+  free(b);
+#endif
   shmem_finalize();
 
   return exitcode;
