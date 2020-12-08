@@ -107,19 +107,7 @@ shmem_internal_fence(shmem_ctx_t ctx)
         COMP(cond, *(var), value, cmpret);               \
         while (!cmpret) {                                \
             shmem_transport_probe();                     \
-            if (SHMEM_CHECK_USER_YIELD_FN_EXISTS) {      \
-                if (ult_scheduling_mode) {               \
-                    int ret = shmem_internal_runnable_thread_exists(NULL, 2, (long *) var, cond, value); \
-                    if (ret >= 0)                            \
-                        shmem_internal_yield_fn(0);          \
-                    else                                     \
-                        shmem_internal_yield_fn(-1);         \
-                } else {                                 \
-                    shmem_internal_yield_fn(-1);         \
-                }                                        \
-            }                                            \
-            else                                         \
-                SPINLOCK_BODY();                         \
+            SPINLOCK_BODY();                         \
             COMP(cond, *(var), value, cmpret);           \
         }                                                \
     } while(0)
