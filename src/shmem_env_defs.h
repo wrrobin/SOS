@@ -52,7 +52,9 @@ SHMEM_INTERNAL_ENV_DEF(TRAP_ON_ABORT, bool, false, SHMEM_INTERNAL_ENV_CAT_OTHER,
                        "Generate trap if the program aborts or calls shmem_global_exit")
 
 SHMEM_INTERNAL_ENV_DEF(COLL_CROSSOVER, long, 4, SHMEM_INTERNAL_ENV_CAT_COLLECTIVES,
-                       "Crossover between linear and tree collectives")
+                       "Crossover between linear and tree collectives (num. PEs)")
+SHMEM_INTERNAL_ENV_DEF(COLL_SIZE_CROSSOVER, size, 16384, SHMEM_INTERNAL_ENV_CAT_COLLECTIVES,
+                       "Crossover between latency and bandwidth optimized collectives (msg. size)")
 SHMEM_INTERNAL_ENV_DEF(COLL_RADIX, long, 4, SHMEM_INTERNAL_ENV_CAT_COLLECTIVES,
                        "Radix for tree-based collectives")
 SHMEM_INTERNAL_ENV_DEF(BARRIER_ALGORITHM, string, "auto", SHMEM_INTERNAL_ENV_CAT_COLLECTIVES,
@@ -67,6 +69,11 @@ SHMEM_INTERNAL_ENV_DEF(FCOLLECT_ALGORITHM, string, "auto", SHMEM_INTERNAL_ENV_CA
                        "Algorithm for fcollect.  Options are auto, linear, ring, recdbl")
 SHMEM_INTERNAL_ENV_DEF(BARRIERS_FLUSH, bool, false, SHMEM_INTERNAL_ENV_CAT_COLLECTIVES,
                         "Flush stdout and stderr on barrier")
+
+SHMEM_INTERNAL_ENV_DEF(TEAMS_MAX, long, DEFAULT_TEAMS_MAX, SHMEM_INTERNAL_ENV_CAT_OTHER,
+                       "Maximum number of teams per PE")
+SHMEM_INTERNAL_ENV_DEF(TEAM_SHARED_ONLY_SELF, bool, false, SHMEM_INTERNAL_ENV_CAT_OTHER,
+                       "Include only the self PE in SHMEM_TEAM_SHARED")
 
 #ifdef USE_CMA
 SHMEM_INTERNAL_ENV_DEF(CMA_PUT_MAX, size, 8*1024, SHMEM_INTERNAL_ENV_CAT_INTRANODE,
@@ -100,6 +107,11 @@ SHMEM_INTERNAL_ENV_DEF(OFI_STX_ALLOCATOR, string, "round-robin", SHMEM_INTERNAL_
                        "Algorithm for allocating STX resources to contexts")
 SHMEM_INTERNAL_ENV_DEF(OFI_STX_DISABLE_PRIVATE, bool, false, SHMEM_INTERNAL_ENV_CAT_TRANSPORT,
                        "Disallow private contexts from having exclusive STX access")
+#endif
+
+#ifdef USE_UCX
+SHMEM_INTERNAL_ENV_DEF(PROGRESS_INTERVAL, long, 1000, SHMEM_INTERNAL_ENV_CAT_TRANSPORT,
+                       "Polling interval for progress thread in microseconds (0 to disable)")
 #endif
 
 #ifdef ENABLE_PMI_MPI

@@ -79,7 +79,13 @@ check_PROGRAMS = \
 	c11_test_shmem_atomic_swap \
 	c11_test_shmem_atomic_cswap \
 	c11_test_shmem_wait_until \
+	c11_test_shmem_wait_until_vector \
+	c11_shmem_wait_until_all_any_some \
 	c11_test_shmem_test \
+	c11_shmem_test_vector \
+	c11_shmem_test_all_any_some \
+	c11_shmem_team_collective_types \
+	c11_shmem_team_reduce \
 	get_nbi \
 	put_nbi \
 	rma_coverage \
@@ -88,16 +94,29 @@ check_PROGRAMS = \
 	repeated_syncs \
 	broadcast_active_set \
 	reduce_active_set \
+	reduce_in_place \
 	collect_active_set \
 	atomic_bitwise \
 	nop_collectives \
 	self_collectives \
 	zero_comm \
 	sync-size \
-	shmem_ctx_pipelined_reduce \
 	many-ctx \
 	shmem_test \
-	shmem_ptr
+	shmem_ptr \
+	shmem_malloc_with_hints \
+	put_signal \
+	put_signal_nbi \
+	signal_fetch \
+	shmem_team_b2b_collectives \
+	shmem_team_collect_active_set \
+	shmem_team_max \
+	shmem_team_reuse_teams \
+	shmem_team_shared \
+	shmem_team_split_2d \
+	shmem_team_translate \
+	atomic_nbi \
+	fadd_nbi
 
 # Temporarily disabled: Global exit test tends to fail with MPI-PMI
 if !USE_PMI_MPI
@@ -107,7 +126,8 @@ endif
 
 if ENABLE_PROFILING
 check_PROGRAMS += \
-	rma_coverage_pshmem
+	rma_coverage_pshmem \
+	pcontrol
 endif
 
 if HAVE_CXX
@@ -127,7 +147,8 @@ check_PROGRAMS += \
 	cxx_test_shmem_atomic_swap \
 	cxx_test_shmem_atomic_cswap \
 	cxx_test_shmem_wait_until \
-	cxx_test_shmem_test
+	cxx_test_shmem_test \
+	cxx_shmem_test_all
 endif
 
 if HAVE_FORTRAN
@@ -152,11 +173,6 @@ check_PROGRAMS += \
     web \
     thread_wait \
     query_thread_funneled 
-endif
-
-if HAVE_OPENMP
-check_PROGRAMS += \
-    shmem_ctx
 endif
 
 TESTS = $(check_PROGRAMS)
@@ -222,8 +238,6 @@ web_LDADD = $(LDADD) $(PTHREAD_CFLAGS)
 thread_wait_LDFLAGS = $(AM_LDFLAGS) $(PTHREAD_LIBS)
 thread_wait_CFLAGS = $(PTHREAD_CFLAGS)
 thread_wait_LDADD = $(LDADD) $(PTHREAD_CFLAGS)
-
-shmem_ctx_CFLAGS = $(AM_OPENMP_CFLAGS)
 
 # Fortran Tests (only .c tests use automatic _SOURCES)
 hello_f_SOURCES = hello_f.f90

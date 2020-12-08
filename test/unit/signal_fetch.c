@@ -1,5 +1,5 @@
 /*
- *  Copyright (c) 2018 Intel Corporation. All rights reserved.
+ *  Copyright (c) 2020 Intel Corporation. All rights reserved.
  *  This software is available to you under the BSD license below:
  *
  *      Redistribution and use in source and binary forms, with or
@@ -26,16 +26,12 @@
  */
 
 /* 
- * Validate shmem_put_signal operation through blocking API
- * It mimics the broadcast operation through a ring-based algorithm 
- * using shmem_put_signal.
+ * Validate signal_fetch operation using blocking put_signal
 */
 
 #include <stdio.h>
 #include <shmem.h>
 #include <string.h>
-
-#include <shmemx.h>
 
 #define MSG_SZ 10
 
@@ -43,7 +39,7 @@ int main(int argc, char *argv[])
 {
     long source[MSG_SZ];
     long *target;
-    int me, npes, dest, i;
+    int me, npes, i;
     int errors = 0;
 
     static uint64_t sig_addr = 0;
@@ -52,7 +48,6 @@ int main(int argc, char *argv[])
 
     me = shmem_my_pe();
     npes = shmem_n_pes();
-    dest = (me + 1) % npes;
 
     for (i = 0; i < MSG_SZ; i++)
         source[i] = i;
@@ -63,29 +58,28 @@ int main(int argc, char *argv[])
         shmem_global_exit(1);
     }
 
-    if (me == 0) {
-        shmemx_long_put_signal(target, source, MSG_SZ, &sig_addr, 1, dest);
+    shmem_barrier_all();
+    for (i = 0; i < npes; i++) {
+        shmem_long_put_signal(target, source, MSG_SZ, &sig_addr, me, SHMEM_SIGNAL_ADD, i);
+    }
+
+    uint64_t sig_value = shmem_signal_fetch(&sig_addr);
+    while (sig_value != (uint64_t) ((npes * (npes - 1)) / 2)) {
 #if defined(__STDC_VERSION__) && __STDC_VERSION__ >= 201112L
-        shmem_wait_until(&sig_addr, SHMEM_CMP_EQ, 1);
+        shmem_wait_until(&sig_addr, SHMEM_CMP_NE, 0);
 #else
-        shmem_uint64_wait_until(&sig_addr, SHMEM_CMP_EQ, 1);
+        shmem_uint64_wait_until(&sig_addr, SHMEM_CMP_NE, 0);
 #endif
-    } else {
-#if defined(__STDC_VERSION__) && __STDC_VERSION__ >= 201112L
-        shmem_wait_until(&sig_addr, SHMEM_CMP_EQ, 1);
-#else
-        shmem_uint64_wait_until(&sig_addr, SHMEM_CMP_EQ, 1);
-#endif
-        shmemx_long_put_signal(target, target, MSG_SZ, &sig_addr, 1, dest);
+        sig_value = shmem_signal_fetch(&sig_addr);
     }
 
     for (i = 0; i < MSG_SZ; i++) {
         if (target[i] != source[i]) {
-            fprintf(stderr, "%10d: target[%d] = %ld not matching %ld\n",
+            fprintf(stderr, "%10d: target[%d] = %ld not matching %ld with SHMEM_SIGNAL_ADD\n",
                     me, i, target[i], source[i]);
             errors++;
         }
-    } 
+    }
     
     shmem_free(target);
     shmem_finalize();

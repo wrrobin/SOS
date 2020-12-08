@@ -1,5 +1,9 @@
 /*
- *  Copyright (c) 2018 Intel Corporation. All rights reserved.
+ * Copyright 2011 Sandia Corporation. Under the terms of Contract
+ * DE-AC04-94AL85000 with Sandia Corporation, the U.S.  Government
+ * retains certain rights in this software.
+ *
+ *  Copyright (c) 2017 Intel Corporation. All rights reserved.
  *  This software is available to you under the BSD license below:
  *
  *      Redistribution and use in source and binary forms, with or
@@ -23,35 +27,24 @@
  * ACTION OF CONTRACT, TORT OR OTHERWISE, ARISING FROM, OUT OF OR IN
  * CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE
  * SOFTWARE.
- *
- * This test is derived from an example provided in the OpenSHMEM 1.4
- * specification.  Additional copyrights may apply.
- *
  */
 
+#include <stdio.h>
+#include <stdlib.h>
 #include <shmem.h>
-#include <shmemx.h>
 
-int main(void)
+int
+main(int argc, char* argv[], char *envp[])
 {
     shmem_init();
-    int mype = shmem_my_pe();
-    int npes = shmem_n_pes();
 
-    int *flags = shmem_calloc(npes, sizeof(int));
+    shmem_pcontrol(1, "Region 1");
+    shmem_barrier_all();
 
-    for (int i = 0; i < npes; i++)
-        shmem_int_p(&flags[mype], 1, i);
+    shmem_pcontrol(1, "Region 2");
+    shmem_barrier_all();
 
-    shmemx_int_wait_until_all(flags, npes, SHMEM_CMP_EQ, 1);
-
-    /* Check the flags array */
-    for (int i = 0; i < npes; i++) {
-        if (flags[i] != 1)
-            shmem_global_exit(1);
-    }
-
-    shmem_free(flags);
     shmem_finalize();
+
     return 0;
 }

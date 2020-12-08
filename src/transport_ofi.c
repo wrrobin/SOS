@@ -74,7 +74,9 @@ struct fid_mr*                  shmem_transport_ofi_target_heap_mrfd;
 struct fid_mr*                  shmem_transport_ofi_target_data_mrfd;
 uint64_t*                       shmem_transport_ofi_target_heap_keys;
 uint64_t*                       shmem_transport_ofi_target_data_keys;
-#ifndef ENABLE_REMOTE_VIRTUAL_ADDRESSING
+#ifdef ENABLE_REMOTE_VIRTUAL_ADDRESSING
+int                             shmem_transport_ofi_use_absolute_address;
+#else
 uint8_t**                       shmem_transport_ofi_target_heap_addrs;
 uint8_t**                       shmem_transport_ofi_target_data_addrs;
 #endif /* ENABLE_REMOTE_VIRTUAL_ADDRESSING */
@@ -96,6 +98,56 @@ shmem_internal_mutex_t          shmem_transport_ofi_lock;
 pthread_mutex_t                 shmem_transport_ofi_progress_lock = PTHREAD_MUTEX_INITIALIZER;
 #endif /* ENABLE_THREADS */
 long 				ult_scheduling_mode;
+
+/* Temporarily redefine SHM_INTERNAL integer types to their FI counterparts to
+ * translate the DTYPE_* types (defined by autoconf according to system ABI)
+ * into FI types in the table below */
+#define SHM_INTERNAL_INT8   FI_INT8
+#define SHM_INTERNAL_INT16  FI_INT16
+#define SHM_INTERNAL_INT32  FI_INT32
+#define SHM_INTERNAL_INT64  FI_INT64
+#define SHM_INTERNAL_UINT8  FI_UINT8
+#define SHM_INTERNAL_UINT16 FI_UINT16
+#define SHM_INTERNAL_UINT32 FI_UINT32
+#define SHM_INTERNAL_UINT64 FI_UINT64
+
+int shmem_transport_dtype_table[] = {
+    FI_INT8,                  /* SHM_INTERNAL_SIGNED_BYTE    */
+    DTYPE_SHORT,              /* SHM_INTERNAL_SHORT          */
+    DTYPE_INT,                /* SHM_INTERNAL_INT            */
+    DTYPE_LONG,               /* SHM_INTERNAL_LONG           */
+    DTYPE_LONG_LONG,          /* SHM_INTERNAL_LONG_LONG      */
+    DTYPE_FORTRAN_INTEGER,    /* SHM_INTERNAL_FORTRAN_INT    */
+    FI_INT8,                  /* SHM_INTERNAL_INT8           */
+    FI_INT16,                 /* SHM_INTERNAL_INT16          */
+    FI_INT32,                 /* SHM_INTERNAL_INT32          */
+    FI_INT64,                 /* SHM_INTERNAL_INT64          */
+    DTYPE_PTRDIFF_T,          /* SHM_INTERNAL_PTRDIFF_T      */
+    DTYPE_UNSIGNED_CHAR,      /* SHM_INTERNAL_UCHAR          */
+    DTYPE_UNSIGNED_SHORT,     /* SHM_INTERNAL_USHORT         */
+    DTYPE_UNSIGNED_INT,       /* SHM_INTERNAL_UINT           */
+    DTYPE_UNSIGNED_LONG,      /* SHM_INTERNAL_ULONG          */
+    DTYPE_UNSIGNED_LONG_LONG, /* SHM_INTERNAL_ULONG_LONG     */
+    FI_UINT8,                 /* SHM_INTERNAL_UINT8          */
+    FI_UINT16,                /* SHM_INTERNAL_UINT16         */
+    FI_UINT32,                /* SHM_INTERNAL_UINT32         */
+    FI_UINT64,                /* SHM_INTERNAL_UINT64         */
+    DTYPE_SIZE_T,             /* SHM_INTERNAL_SIZE_T         */
+    FI_FLOAT,                 /* SHM_INTERNAL_FLOAT          */
+    FI_DOUBLE,                /* SHM_INTERNAL_DOUBLE         */
+    FI_LONG_DOUBLE,           /* SHM_INTERNAL_LONG_DOUBLE    */
+    FI_FLOAT_COMPLEX,         /* SHM_INTERNAL_FLOAT_COMPLEX  */
+    FI_DOUBLE_COMPLEX         /* SHM_INTERNAL_DOUBLE_COMPLEX */
+};
+
+#undef SHM_INTERNAL_INT8
+#undef SHM_INTERNAL_INT16
+#undef SHM_INTERNAL_INT32
+#undef SHM_INTERNAL_INT64
+#undef SHM_INTERNAL_UINT8
+#undef SHM_INTERNAL_UINT16
+#undef SHM_INTERNAL_UINT32
+#undef SHM_INTERNAL_UINT64
 
 /* Need a syscall to gettid() because glibc doesn't provide a wrapper
  * (see gettid manpage in the NOTES section): */
@@ -138,8 +190,6 @@ struct shmem_internal_tid shmem_transport_ofi_gettid(void)
 
 static struct fabric_info shmem_transport_ofi_info = {0};
 
-static shmem_transport_ctx_t** shmem_transport_ofi_contexts = NULL;
-static size_t shmem_transport_ofi_contexts_len = 0;
 static size_t shmem_transport_ofi_grow_size = 128;
 
 #define SHMEM_TRANSPORT_CTX_DEFAULT_ID -1
@@ -207,24 +257,20 @@ static inline void init_ofi_tables(void)
 /* Cover OpenSHMEM atomics API */
 
 #define SIZEOF_AMO_DT 5
-static int DT_AMO_STANDARD[]=
-{
+static int DT_AMO_STANDARD[] = {
     SHM_INTERNAL_INT, SHM_INTERNAL_LONG, SHM_INTERNAL_LONG_LONG,
     SHM_INTERNAL_INT32, SHM_INTERNAL_INT64
 };
 #define SIZEOF_AMO_OPS 1
-static int AMO_STANDARD_OPS[]=
-{
+static int AMO_STANDARD_OPS[] = {
     SHM_INTERNAL_SUM
 };
 #define SIZEOF_AMO_FOPS 1
-static int FETCH_AMO_STANDARD_OPS[]=
-{
+static int FETCH_AMO_STANDARD_OPS[] = {
     SHM_INTERNAL_SUM
 };
 #define SIZEOF_AMO_COPS 1
-static int COMPARE_AMO_STANDARD_OPS[]=
-{
+static int COMPARE_AMO_STANDARD_OPS[] = {
     FI_CSWAP
 };
 
@@ -234,85 +280,73 @@ static int COMPARE_AMO_STANDARD_OPS[]=
 #else
 #define SIZEOF_AMO_EX_DT 7
 #endif
-static int DT_AMO_EXTENDED[]=
-{
+static int DT_AMO_EXTENDED[] = {
     SHM_INTERNAL_FLOAT, SHM_INTERNAL_DOUBLE, SHM_INTERNAL_INT, SHM_INTERNAL_LONG,
     SHM_INTERNAL_LONG_LONG, SHM_INTERNAL_INT32, SHM_INTERNAL_INT64,
     SHM_INTERNAL_FORTRAN_INTEGER
 };
 #define SIZEOF_AMO_EX_OPS 1
-static int AMO_EXTENDED_OPS[]=
-{
+static int AMO_EXTENDED_OPS[] = {
     FI_ATOMIC_WRITE
 };
 #define SIZEOF_AMO_EX_FOPS 2
-static int FETCH_AMO_EXTENDED_OPS[]=
-{
+static int FETCH_AMO_EXTENDED_OPS[] = {
     FI_ATOMIC_WRITE, FI_ATOMIC_READ
 };
 
 
 /* Cover one-sided implementation of reduction */
-
 #define SIZEOF_RED_DT 6
-static int DT_REDUCE_BITWISE[]=
-{
+static int DT_REDUCE_BITWISE[] = {
     SHM_INTERNAL_SHORT, SHM_INTERNAL_INT, SHM_INTERNAL_LONG,
     SHM_INTERNAL_LONG_LONG, SHM_INTERNAL_INT32, SHM_INTERNAL_INT64
 };
 #define SIZEOF_RED_OPS 3
-static int REDUCE_BITWISE_OPS[]=
-{
+static int REDUCE_BITWISE_OPS[] = {
     SHM_INTERNAL_BAND, SHM_INTERNAL_BOR, SHM_INTERNAL_BXOR
 };
 
 
 #define SIZEOF_REDC_DT 9
-static int DT_REDUCE_COMPARE[]=
-{
+static int DT_REDUCE_COMPARE[] = {
     SHM_INTERNAL_FLOAT, SHM_INTERNAL_DOUBLE, SHM_INTERNAL_SHORT,
     SHM_INTERNAL_INT, SHM_INTERNAL_LONG, SHM_INTERNAL_LONG_LONG,
     SHM_INTERNAL_INT32, SHM_INTERNAL_INT64, SHM_INTERNAL_LONG_DOUBLE
 };
 #define SIZEOF_REDC_OPS 2
-static int REDUCE_COMPARE_OPS[]=
-{
+static int REDUCE_COMPARE_OPS[] = {
     SHM_INTERNAL_MAX, SHM_INTERNAL_MIN
 };
 
 
 #define SIZEOF_REDA_DT 11
-static int DT_REDUCE_ARITH[]=
-{
+static int DT_REDUCE_ARITH[] = {
     SHM_INTERNAL_FLOAT, SHM_INTERNAL_DOUBLE, SHM_INTERNAL_FLOAT_COMPLEX,
     SHM_INTERNAL_DOUBLE_COMPLEX, SHM_INTERNAL_SHORT, SHM_INTERNAL_INT,
     SHM_INTERNAL_LONG, SHM_INTERNAL_LONG_LONG, SHM_INTERNAL_INT32,
     SHM_INTERNAL_INT64, SHM_INTERNAL_LONG_DOUBLE
 };
 #define SIZEOF_REDA_OPS 2
-static int REDUCE_ARITH_OPS[]=
-{
+static int REDUCE_ARITH_OPS[] = {
     SHM_INTERNAL_SUM, SHM_INTERNAL_PROD
 };
 
 /* Internal to SHMEM implementation atomic requirement */
 /* Locking implementation requirement */
 #define SIZEOF_INTERNAL_REQ_DT 1
-static int DT_INTERNAL_REQ[]=
-{
+static int DT_INTERNAL_REQ[] = {
     SHM_INTERNAL_INT
 };
 #define SIZEOF_INTERNAL_REQ_OPS 1
-static int INTERNAL_REQ_OPS[]=
-{
+static int INTERNAL_REQ_OPS[] = {
     FI_MSWAP
 };
 
-typedef enum{
+typedef enum {
     ATOMIC_NO_SUPPORT,
     ATOMIC_WARNINGS,
     ATOMIC_SOFT_SUPPORT,
-}atomic_support_lv;
+} atomic_support_lv;
 
 
 /* default CQ depth */
@@ -496,7 +530,7 @@ void shmem_transport_ofi_stx_allocate(shmem_transport_ctx_t *ctx)
 
             if (is_unused) {
                 stx->is_private = 1;
-                shmem_transport_ofi_stx_kvs_t *e = malloc(sizeof(shmem_transport_ofi_stx_kvs_t));
+                shmem_transport_ofi_stx_kvs_t *e = calloc(1, sizeof(shmem_transport_ofi_stx_kvs_t));
                 if (e == NULL) {
                     RAISE_ERROR_STR("out of memory when allocating STX KVS entry");
                 }
@@ -529,11 +563,7 @@ void shmem_transport_ofi_stx_allocate(shmem_transport_ctx_t *ctx)
 }
 
 #define OFI_MAJOR_VERSION 1
-#ifdef ENABLE_MR_RMA_EVENT
 #define OFI_MINOR_VERSION 5
-#else
-#define OFI_MINOR_VERSION 0
-#endif
 
 static
 void init_bounce_buffer(shmem_free_list_item_t *item)
@@ -694,8 +724,13 @@ int publish_mr_info(void)
         int err;
         uint64_t heap_key, data_key;
 
-        heap_key = fi_mr_key(shmem_transport_ofi_target_heap_mrfd);
-        data_key = fi_mr_key(shmem_transport_ofi_target_data_mrfd);
+        if (shmem_transport_ofi_info.p_info->domain_attr->mr_mode & FI_MR_PROV_KEY) {
+            heap_key = fi_mr_key(shmem_transport_ofi_target_heap_mrfd);
+            data_key = fi_mr_key(shmem_transport_ofi_target_data_mrfd);
+        } else {
+            heap_key = 1ULL;
+            data_key = 0ULL;
+        }
 
         err = shmem_runtime_put("fi_heap_key", &heap_key, sizeof(uint64_t));
         if (err) {
@@ -710,23 +745,38 @@ int publish_mr_info(void)
         }
     }
 
-#ifndef ENABLE_REMOTE_VIRTUAL_ADDRESSING
+#ifdef ENABLE_REMOTE_VIRTUAL_ADDRESSING
+    if (shmem_transport_ofi_info.p_info->domain_attr->mr_mode & FI_MR_VIRT_ADDR)
+        shmem_transport_ofi_use_absolute_address = 1;
+    else
+        shmem_transport_ofi_use_absolute_address = 0;
+#else /* !ENABLE_REMOTE_VIRTUAL_ADDRESSING */
     {
         int err;
-        err = shmem_runtime_put("fi_heap_addr", &shmem_internal_heap_base, sizeof(uint8_t*));
+        void *heap_base, *data_base;
+
+        if (shmem_transport_ofi_info.p_info->domain_attr->mr_mode & FI_MR_VIRT_ADDR) {
+            heap_base = shmem_internal_heap_base;
+            data_base = shmem_internal_data_base;
+        } else {
+            heap_base = (void *) 0;
+            data_base = (void *) 0;
+        }
+
+        err = shmem_runtime_put("fi_heap_addr", &heap_base, sizeof(uint8_t*));
         if (err) {
             RAISE_WARN_STR("Put of heap address to runtime KVS failed");
             return 1;
         }
 
-        err = shmem_runtime_put("fi_data_addr", &shmem_internal_data_base, sizeof(uint8_t*));
+        err = shmem_runtime_put("fi_data_addr", &data_base, sizeof(uint8_t*));
         if (err) {
             RAISE_WARN_STR("Put of data segment address to runtime KVS failed");
             return 1;
         }
     }
 #endif /* ENABLE_REMOTE_VIRTUAL_ADDRESSING */
-#endif /* ENABLE_MR_SCALABLE */
+#endif /* !ENABLE_MR_SCALABLE */
 
     return 0;
 }
@@ -804,7 +854,7 @@ int populate_mr_tables(void)
         }
     }
 #endif /* ENABLE_REMOTE_VIRTUAL_ADDRESSING */
-#endif /* ENABLE_MR_SCALABLE */
+#endif /* !ENABLE_MR_SCALABLE */
 
     return 0;
 }
@@ -813,7 +863,7 @@ int populate_mr_tables(void)
 static inline
 int atomicvalid_rtncheck(int ret, int atomic_size,
                          atomic_support_lv atomic_sup,
-                         char strOP[], char strDT[])
+                         char *strOP, char *strDT)
 {
     if ((ret != 0 || atomic_size == 0) && atomic_sup != ATOMIC_SOFT_SUPPORT) {
         RAISE_WARN_MSG("Provider does not support atomic '%s' "
@@ -828,19 +878,20 @@ int atomicvalid_rtncheck(int ret, int atomic_size,
 }
 
 static inline
-int atomicvalid_DTxOP(int DT_MAX, int OPS_MAX, int DT[], int OPS[],
+int atomicvalid_DTxOP(int DT_MAX, int OPS_MAX, int *DT, int *OPS,
                       atomic_support_lv atomic_sup)
 {
-    int i, j, ret = 0;
+    int i, j;
     size_t atomic_size;
 
-    for(i=0; i<DT_MAX; i++) {
-        for(j=0; j<OPS_MAX; j++) {
-            ret = fi_atomicvalid(shmem_transport_ctx_default.ep, DT[i],
-                                 OPS[j], &atomic_size);
+    for (i = 0; i < DT_MAX; i++) {
+        for (j = 0; j < OPS_MAX; j++) {
+            int dt = SHMEM_TRANSPORT_DTYPE(DT[i]);
+            int ret = fi_atomicvalid(shmem_transport_ctx_default.ep,
+                                     dt, OPS[j], &atomic_size);
             if (atomicvalid_rtncheck(ret, atomic_size, atomic_sup,
                                      SHMEM_OpName[OPS[j]],
-                                     SHMEM_DtName[DT[i]]))
+                                     SHMEM_DtName[dt]))
                 return ret;
         }
     }
@@ -849,19 +900,20 @@ int atomicvalid_DTxOP(int DT_MAX, int OPS_MAX, int DT[], int OPS[],
 }
 
 static inline
-int compare_atomicvalid_DTxOP(int DT_MAX, int OPS_MAX, int DT[],
-                              int OPS[], atomic_support_lv atomic_sup)
+int compare_atomicvalid_DTxOP(int DT_MAX, int OPS_MAX, int *DT,
+                              int *OPS, atomic_support_lv atomic_sup)
 {
-    int i, j, ret = 0;
+    int i, j;
     size_t atomic_size;
 
-    for(i=0; i<DT_MAX; i++) {
-        for(j=0; j<OPS_MAX; j++) {
-            ret = fi_compare_atomicvalid(shmem_transport_ctx_default.ep, DT[i],
-                                         OPS[j], &atomic_size);
+    for (i = 0; i < DT_MAX; i++) {
+        for (j = 0; j < OPS_MAX; j++) {
+            int dt = SHMEM_TRANSPORT_DTYPE(DT[i]);
+            int ret = fi_compare_atomicvalid(shmem_transport_ctx_default.ep,
+                                             dt, OPS[j], &atomic_size);
             if (atomicvalid_rtncheck(ret, atomic_size, atomic_sup,
                                      SHMEM_OpName[OPS[j]],
-                                     SHMEM_DtName[DT[i]]))
+                                     SHMEM_DtName[dt]))
                 return ret;
         }
     }
@@ -870,19 +922,20 @@ int compare_atomicvalid_DTxOP(int DT_MAX, int OPS_MAX, int DT[],
 }
 
 static inline
-int fetch_atomicvalid_DTxOP(int DT_MAX, int OPS_MAX, int DT[], int OPS[],
+int fetch_atomicvalid_DTxOP(int DT_MAX, int OPS_MAX, int *DT, int *OPS,
                             atomic_support_lv atomic_sup)
 {
-    int i, j, ret = 0;
+    int i, j;
     size_t atomic_size;
 
-    for(i=0; i<DT_MAX; i++) {
-        for(j=0; j<OPS_MAX; j++) {
-            ret = fi_fetch_atomicvalid(shmem_transport_ctx_default.ep, DT[i],
-                                       OPS[j], &atomic_size);
+    for (i = 0; i < DT_MAX; i++) {
+        for (j = 0; j < OPS_MAX; j++) {
+            int dt = SHMEM_TRANSPORT_DTYPE(DT[i]);
+            int ret = fi_fetch_atomicvalid(shmem_transport_ctx_default.ep,
+                                           dt, OPS[j], &atomic_size);
             if (atomicvalid_rtncheck(ret, atomic_size, atomic_sup,
                                      SHMEM_OpName[OPS[j]],
-                                     SHMEM_DtName[DT[i]]))
+                                     SHMEM_DtName[dt]))
                 return ret;
         }
     }
@@ -1104,12 +1157,14 @@ int query_for_fabric(struct fabric_info *info)
     domain_attr.data_progress = FI_PROGRESS_AUTO;
     domain_attr.resource_mgmt = FI_RM_ENABLED;
 #ifdef ENABLE_MR_SCALABLE
-    domain_attr.mr_mode       = FI_MR_SCALABLE; /* VA space-doesn't have to be pre-allocated */
+                                /* Scalable, offset-based addressing, formerly FI_MR_SCALABLE */
+    domain_attr.mr_mode       = 0;
 #  if !defined(ENABLE_HARD_POLLING) && defined(ENABLE_MR_RMA_EVENT)
     domain_attr.mr_mode       = FI_MR_RMA_EVENT; /* can support RMA_EVENT on MR */
 #  endif
 #else
-    domain_attr.mr_mode       = FI_MR_BASIC; /* VA space is pre-allocated */
+                                /* Portable, absolute addressing, formerly FI_MR_BASIC */
+    domain_attr.mr_mode       = FI_MR_VIRT_ADDR | FI_MR_ALLOCATED | FI_MR_PROV_KEY;
 #endif
 #if !defined(ENABLE_MR_SCALABLE) || !defined(ENABLE_REMOTE_VIRTUAL_ADDRESSING)
     domain_attr.mr_key_size   = 1; /* Heap and data use different MR keys, need
@@ -1193,8 +1248,12 @@ int query_for_fabric(struct fabric_info *info)
     /* Only use a single MR, no keys required */
     info->p_info->domain_attr->mr_key_size = 0;
 #else
-    /* Heap and data use different MR keys, need at least 1 byte */
-    info->p_info->domain_attr->mr_key_size = 1;
+    /* Heap and data use different MR keys, need at least 1 byte of key space
+     * if using provider selected keys */
+    if (info->p_info->domain_attr->mr_mode & FI_MR_PROV_KEY)
+        info->p_info->domain_attr->mr_key_size = 1;
+    else
+        info->p_info->domain_attr->mr_key_size = 0;
 #endif
 
     shmem_internal_assertp(info->p_info->tx_attr->inject_size >= shmem_transport_ofi_max_buffered_send);
@@ -1203,10 +1262,11 @@ int query_for_fabric(struct fabric_info *info)
     shmem_transport_ofi_mr_rma_event = (info->p_info->domain_attr->mr_mode & FI_MR_RMA_EVENT) != 0;
 #endif
 
-    DEBUG_MSG("OFI provider: %s, fabric: %s, domain: %s\n"
+    DEBUG_MSG("OFI provider: %s, fabric: %s, domain: %s, mr_mode: 0x%x\n"
               RAISE_PE_PREFIX "max_inject: %zu, max_msg: %zu, stx: %s, stx_max: %ld\n",
               info->p_info->fabric_attr->prov_name,
               info->p_info->fabric_attr->name, info->p_info->domain_attr->name,
+              info->p_info->domain_attr->mr_mode,
               shmem_internal_my_pe,
               shmem_transport_ofi_max_buffered_send,
               shmem_transport_ofi_max_msg_size,
@@ -1518,6 +1578,8 @@ int shmem_transport_startup(void)
         shmem_transport_ofi_stx_pool[i].is_private = 0;
     }
 
+    shmem_transport_ctx_default.team = &shmem_internal_team_world;
+
     ret = shmem_transport_ofi_ctx_init(&shmem_transport_ctx_default, SHMEM_TRANSPORT_CTX_DEFAULT_ID);
     if (ret != 0) return ret;
 
@@ -1533,32 +1595,34 @@ int shmem_transport_startup(void)
     return 0;
 }
 
-int shmem_transport_ctx_create(long options, shmem_transport_ctx_t **ctx)
+int shmem_transport_ctx_create(struct shmem_internal_team_t *team, long options, shmem_transport_ctx_t **ctx)
 {
-    SHMEM_MUTEX_LOCK(shmem_transport_ofi_lock);
-
     int ret;
     size_t id;
 
+    if (team == NULL)
+        RAISE_ERROR_STR("Context creation occured on a NULL team");
+
+    SHMEM_MUTEX_LOCK(shmem_transport_ofi_lock);
+
     /* Look for an open slot in the contexts array */
-    for (id = 0; id < shmem_transport_ofi_contexts_len; id++)
-        if (shmem_transport_ofi_contexts[id] == NULL) break;
+    for (id = 0; id < team->contexts_len; id++)
+        if (team->contexts[id] == NULL) break;
 
     /* If none found, grow the array */
-    if (id >= shmem_transport_ofi_contexts_len) {
-        id = shmem_transport_ofi_contexts_len;
+    if (id >= team->contexts_len) {
+        id = team->contexts_len;
 
-        size_t i = shmem_transport_ofi_contexts_len;
-        shmem_transport_ofi_contexts_len += shmem_transport_ofi_grow_size;
-        shmem_transport_ofi_contexts = realloc(shmem_transport_ofi_contexts,
-               shmem_transport_ofi_contexts_len * sizeof(shmem_transport_ctx_t*));
+        size_t i = team->contexts_len;
+        team->contexts_len += shmem_transport_ofi_grow_size;
+        team->contexts = realloc(team->contexts, team->contexts_len * sizeof(shmem_transport_ctx_t*));
 
-        for ( ; i < shmem_transport_ofi_contexts_len; i++)
-            shmem_transport_ofi_contexts[i] = NULL;
-
-        if (shmem_transport_ofi_contexts == NULL) {
+        if (team->contexts == NULL) {
             RAISE_ERROR_STR("Out of memory when allocating OFI ctx array");
         }
+
+        for ( ; i < team->contexts_len; i++)
+            team->contexts[i] = NULL;
     }
 
     shmem_transport_ctx_t *ctxp = malloc(sizeof(shmem_transport_ctx_t));
@@ -1570,19 +1634,21 @@ int shmem_transport_ctx_create(long options, shmem_transport_ctx_t **ctx)
     memset(ctxp, 0, sizeof(shmem_transport_ctx_t));
 
 #ifndef USE_CTX_LOCK
-    shmem_internal_atomic_write(&ctxp->pending_put_cntr, 0);
-    shmem_internal_atomic_write(&ctxp->pending_get_cntr, 0);
+    shmem_internal_cntr_write(&ctxp->pending_put_cntr, 0);
+    shmem_internal_cntr_write(&ctxp->pending_get_cntr, 0);
 #endif
 
     ctxp->stx_idx = -1;
     ctxp->options = options;
+
+    ctxp->team = team;
 
     ret = shmem_transport_ofi_ctx_init(ctxp, id);
 
     if (ret) {
         shmem_transport_ctx_destroy(ctxp);
     } else {
-        shmem_transport_ofi_contexts[id] = ctxp;
+        team->contexts[id] = ctxp;
         *ctx = ctxp;
     }
 
@@ -1594,6 +1660,9 @@ int shmem_transport_ctx_create(long options, shmem_transport_ctx_t **ctx)
 void shmem_transport_ctx_destroy(shmem_transport_ctx_t *ctx)
 {
     int ret;
+
+    if (ctx == NULL)
+        return;
 
     if(shmem_internal_params.DEBUG) {
         SHMEM_TRANSPORT_OFI_CTX_LOCK(ctx);
@@ -1674,7 +1743,7 @@ void shmem_transport_ctx_destroy(shmem_transport_ctx_t *ctx)
 
     if (ctx->id >= 0) {
         SHMEM_MUTEX_LOCK(shmem_transport_ofi_lock);
-        shmem_transport_ofi_contexts[ctx->id] = NULL;
+        ctx->team->contexts[ctx->id] = NULL;
         SHMEM_MUTEX_UNLOCK(shmem_transport_ofi_lock);
         free(ctx);
     }
@@ -1689,20 +1758,8 @@ int shmem_transport_fini(void)
     shmem_transport_ofi_stx_kvs_t* e;
     int stx_len = 0;
 
-    /* Free all shareable contexts.  This performs a quiet on each context,
-     * ensuring all operations have completed before proceeding with shutdown. */
-
-    for (size_t i = 0; i < shmem_transport_ofi_contexts_len; ++i) {
-        if (shmem_transport_ofi_contexts[i]) {
-            if (shmem_transport_ofi_is_private(shmem_transport_ofi_contexts[i]->options))
-                RAISE_WARN_MSG("Shutting down with unfreed private context (%zu)\n", i);
-            shmem_transport_quiet(shmem_transport_ofi_contexts[i]);
-            shmem_transport_ctx_destroy(shmem_transport_ofi_contexts[i]);
-        }
-    }
-
-    if (shmem_transport_ofi_contexts) free(shmem_transport_ofi_contexts);
-
+    /* The default context is not inserted into the list of contexts on
+     * SHMEM_TEAM_WORLD, so it must be destroyed here */
     shmem_transport_quiet(&shmem_transport_ctx_default);
     shmem_transport_ctx_destroy(&shmem_transport_ctx_default);
 

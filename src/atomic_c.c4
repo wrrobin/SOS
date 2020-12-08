@@ -28,6 +28,7 @@ include(shmem_bind_c.m4)dnl
 #include "shmem.h"
 #include "shmem_internal.h"
 #include "shmem_comm.h"
+#include "shmem_team.h"
 
 #ifdef ENABLE_PROFILING
 #include "pshmem.h"
@@ -229,6 +230,7 @@ SHMEM_DEFINE_FOR_EXTENDED_AMO(`SHMEM_PROF_DEF_CTX_ATOMIC_SET')
         TYPE newval;                                            \
         SHMEM_ERR_CHECK_INITIALIZED();                          \
         SHMEM_ERR_CHECK_PE(pe);                                 \
+        SHMEM_ERR_CHECK_CTX(ctx);                               \
         SHMEM_ERR_CHECK_SYMMETRIC(target, sizeof(TYPE));        \
         shmem_internal_swap(ctx, target, &value, &newval,       \
                             sizeof(TYPE), pe, ITYPE);           \
@@ -263,6 +265,7 @@ shmem_swap(long *target, long value, int pe)
         TYPE newval;                                                    \
         SHMEM_ERR_CHECK_INITIALIZED();                                  \
         SHMEM_ERR_CHECK_PE(pe);                                         \
+        SHMEM_ERR_CHECK_CTX(ctx);                                       \
         SHMEM_ERR_CHECK_SYMMETRIC(target, sizeof(TYPE));                \
         shmem_internal_cswap(ctx, target, &value, &newval, &cond,       \
                              sizeof(TYPE), pe, ITYPE);                  \
@@ -278,6 +281,7 @@ shmem_swap(long *target, long value, int pe)
         TYPE newval;                                                    \
         SHMEM_ERR_CHECK_INITIALIZED();                                  \
         SHMEM_ERR_CHECK_PE(pe);                                         \
+        SHMEM_ERR_CHECK_CTX(ctx);                                       \
         SHMEM_ERR_CHECK_SYMMETRIC(target, sizeof(TYPE));                \
         shmem_internal_cswap(ctx, target, &value, &newval, &cond,       \
                              sizeof(TYPE), pe, ITYPE);                  \
@@ -292,6 +296,7 @@ shmem_swap(long *target, long value, int pe)
         TYPE tmp = 1;                                                   \
         SHMEM_ERR_CHECK_INITIALIZED();                                  \
         SHMEM_ERR_CHECK_PE(pe);                                         \
+        SHMEM_ERR_CHECK_CTX(ctx);                                       \
         SHMEM_ERR_CHECK_SYMMETRIC(target, sizeof(TYPE));                \
         shmem_internal_atomic(ctx, target, &tmp, sizeof(TYPE),          \
                               pe, SHM_INTERNAL_SUM, ITYPE);             \
@@ -304,6 +309,7 @@ shmem_swap(long *target, long value, int pe)
         TYPE oldval, tmp = 1;                                           \
         SHMEM_ERR_CHECK_INITIALIZED();                                  \
         SHMEM_ERR_CHECK_PE(pe);                                         \
+        SHMEM_ERR_CHECK_CTX(ctx);                                       \
         SHMEM_ERR_CHECK_SYMMETRIC(target, sizeof(TYPE));                \
         shmem_internal_fetch_atomic(ctx, target, &tmp, &oldval,         \
                                     sizeof(TYPE), pe, SHM_INTERNAL_SUM, \
@@ -319,6 +325,7 @@ shmem_swap(long *target, long value, int pe)
         TYPE oldval, tmp = 1;                                           \
         SHMEM_ERR_CHECK_INITIALIZED();                                  \
         SHMEM_ERR_CHECK_PE(pe);                                         \
+        SHMEM_ERR_CHECK_CTX(ctx);                                       \
         SHMEM_ERR_CHECK_SYMMETRIC(target, sizeof(TYPE));                \
         shmem_internal_fetch_atomic(ctx, target, &tmp, &oldval,         \
                                     sizeof(TYPE), pe, SHM_INTERNAL_SUM, \
@@ -333,6 +340,7 @@ shmem_swap(long *target, long value, int pe)
     SHMEM_FUNC_PROTOTYPE(STYPE, add, TYPE *target, TYPE value, int pe)  \
         SHMEM_ERR_CHECK_INITIALIZED();                                  \
         SHMEM_ERR_CHECK_PE(pe);                                         \
+        SHMEM_ERR_CHECK_CTX(ctx);                                       \
         SHMEM_ERR_CHECK_SYMMETRIC(target, sizeof(TYPE));                \
                                                                         \
         shmem_internal_atomic(ctx, target, &value, sizeof(TYPE),        \
@@ -347,6 +355,7 @@ shmem_swap(long *target, long value, int pe)
         TYPE oldval;                                                    \
         SHMEM_ERR_CHECK_INITIALIZED();                                  \
         SHMEM_ERR_CHECK_PE(pe);                                         \
+        SHMEM_ERR_CHECK_CTX(ctx);                                       \
         SHMEM_ERR_CHECK_SYMMETRIC(target, sizeof(TYPE));                \
                                                                         \
         shmem_internal_fetch_atomic(ctx, target, &value, &oldval,       \
@@ -363,6 +372,7 @@ shmem_swap(long *target, long value, int pe)
         TYPE oldval;                                                    \
         SHMEM_ERR_CHECK_INITIALIZED();                                  \
         SHMEM_ERR_CHECK_PE(pe);                                         \
+        SHMEM_ERR_CHECK_CTX(ctx);                                       \
         SHMEM_ERR_CHECK_SYMMETRIC(target, sizeof(TYPE));                \
                                                                         \
         shmem_internal_fetch_atomic(ctx, target, &value, &oldval,       \
@@ -380,6 +390,7 @@ shmem_swap(long *target, long value, int pe)
                                                                         \
         SHMEM_ERR_CHECK_INITIALIZED();                                  \
         SHMEM_ERR_CHECK_PE(pe);                                         \
+        SHMEM_ERR_CHECK_CTX(ctx);                                       \
         SHMEM_ERR_CHECK_SYMMETRIC(source, sizeof(TYPE));                \
                                                                         \
         shmem_internal_atomic_fetch(ctx, &val, (void *) source,         \
@@ -394,6 +405,7 @@ shmem_swap(long *target, long value, int pe)
     SHMEM_FUNC_PROTOTYPE(STYPE, set, TYPE *dest, TYPE value, int pe)    \
         SHMEM_ERR_CHECK_INITIALIZED();                                  \
         SHMEM_ERR_CHECK_PE(pe);                                         \
+        SHMEM_ERR_CHECK_CTX(ctx);                                       \
         SHMEM_ERR_CHECK_SYMMETRIC(dest, sizeof(TYPE));                  \
                                                                         \
         shmem_internal_atomic_set(ctx, (void *) dest, &value,           \
@@ -406,6 +418,7 @@ shmem_swap(long *target, long value, int pe)
     SHMEM_FUNC_PROTOTYPE(STYPE, xor, TYPE *target, TYPE value, int pe)  \
         SHMEM_ERR_CHECK_INITIALIZED();                                  \
         SHMEM_ERR_CHECK_PE(pe);                                         \
+        SHMEM_ERR_CHECK_CTX(ctx);                                       \
         SHMEM_ERR_CHECK_SYMMETRIC(target, sizeof(TYPE));                \
                                                                         \
         shmem_internal_atomic(ctx, target, &value, sizeof(TYPE),        \
@@ -418,6 +431,7 @@ shmem_swap(long *target, long value, int pe)
     SHMEM_FUNC_PROTOTYPE(STYPE, and, TYPE *target, TYPE value, int pe)  \
         SHMEM_ERR_CHECK_INITIALIZED();                                  \
         SHMEM_ERR_CHECK_PE(pe);                                         \
+        SHMEM_ERR_CHECK_CTX(ctx);                                       \
         SHMEM_ERR_CHECK_SYMMETRIC(target, sizeof(TYPE));                \
                                                                         \
         shmem_internal_atomic(ctx, target, &value, sizeof(TYPE),        \
@@ -430,6 +444,7 @@ shmem_swap(long *target, long value, int pe)
     SHMEM_FUNC_PROTOTYPE(STYPE, or, TYPE *target, TYPE value, int pe)   \
         SHMEM_ERR_CHECK_INITIALIZED();                                  \
         SHMEM_ERR_CHECK_PE(pe);                                         \
+        SHMEM_ERR_CHECK_CTX(ctx);                                       \
         SHMEM_ERR_CHECK_SYMMETRIC(target, sizeof(TYPE));                \
                                                                         \
         shmem_internal_atomic(ctx, target, &value, sizeof(TYPE),        \
@@ -444,6 +459,7 @@ shmem_swap(long *target, long value, int pe)
         TYPE oldval;                                                         \
         SHMEM_ERR_CHECK_INITIALIZED();                                       \
         SHMEM_ERR_CHECK_PE(pe);                                              \
+        SHMEM_ERR_CHECK_CTX(ctx);                                            \
         SHMEM_ERR_CHECK_SYMMETRIC(target, sizeof(TYPE));                     \
                                                                              \
         shmem_internal_fetch_atomic(ctx, target, &value, &oldval,            \
@@ -460,6 +476,7 @@ shmem_swap(long *target, long value, int pe)
         TYPE oldval;                                                         \
         SHMEM_ERR_CHECK_INITIALIZED();                                       \
         SHMEM_ERR_CHECK_PE(pe);                                              \
+        SHMEM_ERR_CHECK_CTX(ctx);                                            \
         SHMEM_ERR_CHECK_SYMMETRIC(target, sizeof(TYPE));                     \
                                                                              \
         shmem_internal_fetch_atomic(ctx, target, &value, &oldval,            \
@@ -476,6 +493,7 @@ shmem_swap(long *target, long value, int pe)
         TYPE oldval;                                                         \
         SHMEM_ERR_CHECK_INITIALIZED();                                       \
         SHMEM_ERR_CHECK_PE(pe);                                              \
+        SHMEM_ERR_CHECK_CTX(ctx);                                            \
         SHMEM_ERR_CHECK_SYMMETRIC(target, sizeof(TYPE));                     \
                                                                              \
         shmem_internal_fetch_atomic(ctx, target, &value, &oldval,            \
@@ -526,6 +544,7 @@ SHMEM_DEFINE_FOR_BITWISE_AMO(SHMEM_DEF_XOR)
 /* Function prototype for v1.4 routines with contexts: */
 #define SHMEM_FUNC_PROTOTYPE(TYPE, OP, ...)                           \
   shmem_ctx_##TYPE##_atomic_##OP(shmem_ctx_t ctx, __VA_ARGS__) {      \
+  pe = shmem_internal_team_pe(((shmem_transport_ctx_t *) ctx)->team, pe);
 
 SHMEM_DEFINE_FOR_EXTENDED_AMO(SHMEM_DEF_FETCH)
 SHMEM_DEFINE_FOR_EXTENDED_AMO(SHMEM_DEF_SET)

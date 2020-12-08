@@ -2,6 +2,82 @@
 
 Sandia OpenSHMEM NEWS -- history of user-visible changes.
 
+v1.5.0rc1
+---------
+- Support for OpenSHMEM v1.5 specification
+- New features include: a teams API and teams-based collectives,
+  put-with-signal routines, nonblocking atomic routines, multiple-element
+  wait/test vector comparison routines, shmem_malloc_with_hints, and a
+  profiling interface.  See OpenSHMEM 1.5 Specification, Annex G for details.
+- Deprecations include: active-set-based library constants and collective
+  routines, shmem_barrier, and short/unsigned short variants for
+  shmem_wait_until and shmem_test.  See OpenSHMEM 1.5 Specification, Annex F
+  for details.
+- Added support for UCX transport
+- Added shmem_malloc_with_hints. Currently, no hint values are supported.
+- Added shmem_signal_fetch
+- Multiple bugfixes, including in teams resource management, put completion
+  logic, and configure issues when multiple transports are detected.
+
+v1.4.5
+------
+- Added a complete OpenSHMEM teams API to the shmemx interfaces.
+- Added the OpenSHMEM wait/test vector API to the shmemx interfaces.
+- Added support for shared memory atomic operations with the appropriate
+  acquire/release memory ordering where required.  This feature requires
+  the --enable-shr-transport build flag.
+- Improved experimental support for the RXM/Verbs provider stack with
+  libfabric 1.8 and newer.
+- Updated SOS to use the new OFI memory registration mode flags instead of
+  the deprecated FI_MR_SCALABLE/FI_MR_BASIC modes.
+- Updated the wait/test any/all/some "status" array semantics to reflect
+  recent changes to the OpenSHMEM specification.
+- Added a memory sync before returning from barriers to ensure shared memory
+  updates and remote updates cached in the NIC are visible in memory.
+- Updated the utility atomics (spinlocks and counters) to use __atomic built-in
+  functions rather than the deprecated __sync builtins.
+- Removed redundant shmem_barrier_all from the GUPS example application.
+- Moved unit tests derived from OpenSHMEM specification examples to the
+  test/spec-example directory.
+
+v1.4.4
+------
+- Experimental support for RXM/Verbs provider stack with libfabric 1.8.
+  Requires --enable-hard-polling and --enable-ofi-mr=basic build flags.  The
+  FI_MR_CACHE_MAX_COUNT environment variable should be set to 0 when threading
+  is used.  Depending on the libfabric build, setting
+  SHMEM_OFI_PROVIDER="verbs;ofi_rxm" may be necessary to select the provider.
+- Rewrite of node-level detection/management to enable improvements in on-node
+  communication and resource management.
+- Added bandwidth optimized ring reduction algorithm, selectable by setting the
+  SHMEM_REDUCE_ALGORITHM environment variable to "ring".  See README for
+  details.
+- Added the SHMEM_COLL_SIZE_CROSSOVER environment variable to control the
+  message size at which collective communication transitions between latency
+  and bandwidth optimization.
+- Added SHMEM_OFI_STX_AUTO environment variable to enable automatic
+  partitioning of STX resources on node.  See README for details.
+- Updated unit tests and performance test suite to properly handle failed
+  context creation.
+- Updated OFI transport to support providers that do not support the
+  FI_SHARED_CONTEXT TX attribute (STX) on endpoints.
+- Updated OFI transport to bind a CQ to the target EP (required by some
+  providers) and poll the target CQ when driving manual progress.  As a result,
+  manual progress no longer requries a target-side counter and can be used in
+  conjunction with hard polling.
+- Added support for decimal values in the SHMEM_SYMMETRIC_SIZE environment
+  variable (e.g., 1.5G).
+- Updated shmem_init_thread routine to return an error when library
+  initialization fails (e.g., due to invalid SHMEM_SYMMETRIC_SIZE value).
+- Fixed argument/context handling in Mandelbrot example program.
+- Improved handling of context creation failure.
+- Added missing pshmem_global_exit symbol to profiling interfaces.
+- Updated shmem_ptr to return a pointer for the local process, even when
+  inter-PE shared memory is not enabled.
+- Updated fence, quiet, and context destroy to perform no operation for
+  SHMEMX_CTX_INVALID.
+- Additional bugfixes and improvement (see git log for details).
+
 v1.4.3
 ------
 - Added NBI atomics support to performance suite benchmarks.
@@ -70,7 +146,6 @@ v1.4.1
   thread-safe usage of OpenSHMEM locks.
 - Additional minor code cleanups and bugfixes (see git log for details).
 
-
 v1.4.1rc1
 ---------
 - Added multi-threaded implementations of the shmem_perf_suite throughput
@@ -98,7 +173,6 @@ v1.4.1rc1
   OFI STX management, the SOS simple build script, the default poll limit, and
   more.
 - Fix incorrect SHMEM_MINOR_VERSION value.
-
 
 v1.4.0
 ------

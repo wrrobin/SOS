@@ -18,7 +18,9 @@ GEN_BINDINGS = \
 	atomic_nbi_c.c \
 	collectives_c.c \
 	data_c.c \
-	synchronization_c.c
+	synchronization_c.c \
+	teams_c.c
+
 
 if HAVE_FORTRAN
 GEN_BINDINGS += \
@@ -62,16 +64,17 @@ libsma_la_SOURCES = \
 	contexts.c \
 	thread_scheduler.c \
 	perf_counters_c.c \
-	backtrace.c
-
-nodist_libsma_la_SOURCES = \
-	$(GEN_BINDINGS)
+	backtrace.c \
+	shmem_team.c \
+	shmem_team.h
 
 BUILT_SOURCES = $(GEN_BINDINGS) \
-		build_info.h
+		build_info.h \
+		shr_transport.h
 
-CLEANFILES += $(GEN_BINDINGS) \
-		build_info.h
+nodist_libsma_la_SOURCES = $(BUILT_SOURCES)
+
+CLEANFILES += $(BUILT_SOURCES)
 
 if HAVE_FORTRAN
 libsma_la_SOURCES += \
@@ -98,11 +101,19 @@ libsma_la_SOURCES += \
 	transport_ofi.c
 endif
 
+if USE_UCX
+libsma_la_SOURCES += \
+	transport_ucx.h \
+	transport_ucx.c
+endif
+
 if !USE_PORTALS4
 if !USE_OFI
+if !USE_UCX
 libsma_la_SOURCES += \
 	transport_none.c \
 	transport_none.h
+endif
 endif
 endif
 
@@ -169,7 +180,9 @@ EXTRA_DIST = shmem_compiler_script.in \
              collectives_f.c4         \
              data_c.c4                \
              data_f.c4                \
-             synchronization_c.c4
+             synchronization_c.c4     \
+             teams_c.c4               \
+             shr_transport.h4
 
 do_subst = sed -e 's|[@]PERL[@]|$(PERL)|g' \
                -e 's|[@]WRAPPER_COMPILER_CC[@]|$(WRAPPER_COMPILER_CC)|g' \
@@ -188,6 +201,7 @@ am__v_SED_0 = @echo "  SED     " $@;
 
 build_info.h: $(top_builddir)/config.status
 	$(AM_V_GEN) echo "#ifndef BUILD_INFO_H" > $@
+	@echo "#define BUILD_INFO_H" >> $@
 	@if [ -f $(top_srcdir)/.git/HEAD ]; then \
 	     echo "#define SOS_GIT_VERSION \"$(shell git describe --abbrev=8 --dirty --always --tags) ($(shell git rev-parse --abbrev-ref HEAD))\"" >> $@; \
 	fi;
@@ -217,7 +231,10 @@ oshrun: shmem_launcher_script.in Makefile
 	$(AM_V_SED)$(do_subst_launcher) < $(srcdir)/shmem_launcher_script.in > oshrun
 	@chmod +x oshrun
 
-SUFFIXES = .c4
+SUFFIXES = .c4 .h4
 
 .c4.c: $(top_srcdir)/bindings/shmem_bind_c.m4 $(top_srcdir)/bindings/shmem_bind_f.m4
+	$(AM_V_GEN) $(M4) -I$(top_srcdir)/bindings -I$(top_builddir)/bindings $< > $@
+
+.h4.h: $(top_srcdir)/bindings/shmem_bind_c.m4 $(top_srcdir)/bindings/shmem_bind_f.m4
 	$(AM_V_GEN) $(M4) -I$(top_srcdir)/bindings -I$(top_builddir)/bindings $< > $@

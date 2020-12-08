@@ -36,6 +36,7 @@
 #include "shmem_comm.h"
 #include "runtime.h"
 #include "build_info.h"
+#include "shmem_team.h"
 
 #if defined(ENABLE_REMOTE_VIRTUAL_ADDRESSING) && defined(__linux__)
 #include <sys/personality.h>
@@ -111,14 +112,12 @@ shmem_internal_shutdown(void)
     shmem_internal_barrier_all();
 
     shmem_internal_finalized = 1;
+
+    shmem_internal_team_fini();
+
     shmem_transport_fini();
 
-#ifdef USE_XPMEM
-    shmem_transport_xpmem_fini();
-#endif
-#ifdef USE_CMA
-    shmem_transport_cma_fini();
-#endif
+    shmem_shr_transport_fini();
 
     SHMEM_MUTEX_DESTROY(shmem_internal_mutex_alloc);
 
@@ -161,13 +160,9 @@ shmem_internal_init(int tl_requested, int *tl_provided)
 
     int runtime_initialized   = 0;
     int transport_initialized = 0;
-#ifdef USE_XPMEM
-    int xpmem_initialized     = 0;
-#endif
-#ifdef USE_CMA
-    int cma_initialized       = 0;
-#endif
+    int shr_initialized       = 0;
     int randr_initialized     = 0;
+    int teams_initialized     = 0;
     int enable_node_ranks     = 0;
 
     /* Parse environment variables into shmem_internal_params */
@@ -189,6 +184,9 @@ shmem_internal_init(int tl_requested, int *tl_provided)
 #elif USE_OFI
     enable_node_ranks = (shmem_internal_params.OFI_STX_AUTO) ? 1 : 0;
 #endif
+
+    if (!shmem_internal_params.TEAM_SHARED_ONLY_SELF)
+        enable_node_ranks = 1;
 
     ret = shmem_runtime_init(enable_node_ranks);
     if (0 != ret) {
@@ -371,21 +369,11 @@ shmem_internal_init(int tl_requested, int *tl_provided)
         goto cleanup;
     }
 
-#ifdef USE_XPMEM
-    ret = shmem_transport_xpmem_init();
+    ret = shmem_shr_transport_init();
     if (0 != ret) {
-        RETURN_ERROR_MSG("XPMEM init failed (%d)\n", ret);
+        RETURN_ERROR_MSG("Shared memory transport init failed (%d)\n", ret);
         goto cleanup;
     }
-#endif
-
-#ifdef USE_CMA
-    ret = shmem_transport_cma_init();
-    if (0 != ret) {
-        RETURN_ERROR_MSG("CMA init failed (%d)\n", ret);
-        goto cleanup;
-    }
-#endif
 
     /* exchange information */
     ret = shmem_runtime_exchange();
@@ -408,28 +396,25 @@ shmem_internal_init(int tl_requested, int *tl_provided)
     }
     transport_initialized = 1;
 
-#ifdef USE_XPMEM
-    ret = shmem_transport_xpmem_startup();
+    ret = shmem_shr_transport_startup();
     if (0 != ret) {
-        RETURN_ERROR_MSG("XPMEM startup failed (%d)\n", ret);
+        RETURN_ERROR_MSG("Shared memory transport startup failed (%d)\n", ret);
         goto cleanup;
     }
-    xpmem_initialized = 1;
-#endif
-#ifdef USE_CMA
-    ret = shmem_transport_cma_startup();
-    if (0 != ret) {
-        RETURN_ERROR_MSG("CMA startup failed (%d)\n", ret);
-        goto cleanup;
-    }
-    cma_initialized = 1;
-#endif
+    shr_initialized = 1;
 
     ret = shmem_internal_collectives_init();
     if (ret != 0) {
         RETURN_ERROR_MSG("Initialization of collectives failed (%d)\n", ret);
         goto cleanup;
     }
+
+    ret = shmem_internal_team_init();
+    if (ret != 0) {
+        RETURN_ERROR_MSG("Initialization of teams failed (%d)\n", ret);
+        goto cleanup;
+    }
+    teams_initialized = 1;
 
     shmem_internal_randr_init();
     randr_initialized = 1;
@@ -448,19 +433,16 @@ shmem_internal_init(int tl_requested, int *tl_provided)
         shmem_transport_fini();
     }
 
-#ifdef USE_XPMEM
-    if (xpmem_initialized) {
-        shmem_transport_xpmem_fini();
+    if (shr_initialized) {
+        shmem_shr_transport_fini();
     }
-#endif
-#ifdef USE_CMA
-    if (cma_initialized) {
-        shmem_transport_cma_fini();
-    }
-#endif
 
     if (randr_initialized) {
         shmem_internal_randr_fini();
+    }
+
+    if (teams_initialized) {
+        shmem_internal_team_fini();
     }
 
     if (NULL != shmem_internal_data_base) {

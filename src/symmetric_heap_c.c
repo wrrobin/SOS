@@ -64,6 +64,9 @@
 #pragma weak shfree = pshfree
 #define shfree pshfree
 
+#pragma weak shmem_malloc_with_hints = pshmem_malloc_with_hints
+#define shmem_malloc_with_hints pshmem_malloc_with_hints
+
 #endif /* ENABLE_PROFILING */
 
 static char *shmem_internal_heap_curr = NULL;
@@ -278,9 +281,11 @@ shmem_internal_shmalloc(size_t size)
 void SHMEM_FUNCTION_ATTRIBUTES *
 shmem_malloc(size_t size)
 {
-    void *ret;
+    void *ret = NULL;
 
     SHMEM_ERR_CHECK_INITIALIZED();
+
+    if (size == 0) return ret;
 
     SHMEM_MUTEX_LOCK(shmem_internal_mutex_alloc);
     ret = dlmalloc(size);
@@ -294,9 +299,11 @@ shmem_malloc(size_t size)
 void SHMEM_FUNCTION_ATTRIBUTES *
 shmem_calloc(size_t count, size_t size)
 {
-    void *ret;
+    void *ret = NULL;
 
     SHMEM_ERR_CHECK_INITIALIZED();
+
+    if (size == 0 || count == 0) return ret;
 
     SHMEM_MUTEX_LOCK(shmem_internal_mutex_alloc);
     ret = dlcalloc(count, size);
@@ -317,13 +324,7 @@ shmem_free(void *ptr)
 
     shmem_internal_barrier_all();
 
-    /* It's fine to call dlfree with NULL, but better to avoid unnecessarily
-     * taking the mutex in the threaded case. */
-    if (ptr != NULL) {
-        SHMEM_MUTEX_LOCK(shmem_internal_mutex_alloc);
-        dlfree(ptr);
-        SHMEM_MUTEX_UNLOCK(shmem_internal_mutex_alloc);
-    }
+    shmem_internal_free(ptr);
 }
 
 
@@ -333,6 +334,8 @@ shmem_realloc(void *ptr, size_t size)
     void *ret;
 
     SHMEM_ERR_CHECK_INITIALIZED();
+
+    if (size == 0 && ptr == NULL) return ptr;
     if (ptr != NULL) {
       SHMEM_ERR_CHECK_SYMMETRIC_HEAP(ptr);
     }
@@ -357,10 +360,11 @@ shmem_realloc(void *ptr, size_t size)
 void SHMEM_FUNCTION_ATTRIBUTES *
 shmem_align(size_t alignment, size_t size)
 {
-    void *ret;
+    void *ret = NULL;
 
     SHMEM_ERR_CHECK_INITIALIZED();
 
+    if (size == 0) return ret;
     if (alignment == 0)
         return NULL;
 
@@ -401,4 +405,28 @@ void SHMEM_FUNCTION_ATTRIBUTES * shrealloc(void *ptr, size_t size)
 void SHMEM_FUNCTION_ATTRIBUTES * shmemalign(size_t alignment, size_t size)
 {
     return shmem_align(alignment, size);
+}
+
+
+void SHMEM_FUNCTION_ATTRIBUTES *
+shmem_malloc_with_hints(size_t size, long hints)
+{
+    void *ret = NULL;
+
+    SHMEM_ERR_CHECK_INITIALIZED();
+
+    if (size == 0) return ret;
+
+    // Check for valid hints
+    if(hints > SHMEM_MALLOC_MAX_HINTS || hints < 0) {
+        RAISE_WARN_MSG("Ignoring invalid hint for shmem_malloc_with_hints(%ld)\n", hints);
+    }
+
+    SHMEM_MUTEX_LOCK(shmem_internal_mutex_alloc);
+    ret = dlmalloc(size);
+    SHMEM_MUTEX_UNLOCK(shmem_internal_mutex_alloc);
+
+    shmem_internal_barrier_all();
+
+    return ret;
 }

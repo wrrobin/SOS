@@ -22,8 +22,6 @@ typedef struct {
     uint64_t target;
 } shmemx_pcntr_t;
 
-#define SHMEMX_CTX_INVALID NULL
-
 #ifdef __cplusplus
 }
 #endif

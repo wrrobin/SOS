@@ -23,71 +23,35 @@
  * ACTION OF CONTRACT, TORT OR OTHERWISE, ARISING FROM, OUT OF OR IN
  * CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE
  * SOFTWARE.
+ *
+ * This test is derived from an example provided in the OpenSHMEM 1.4
+ * specification.  Additional copyrights may apply.
+ *
  */
 
-#include <stdlib.h>
-#include <stdio.h>
 #include <shmem.h>
-#include <shmemx.h>
 
-long ctr = 0;
-
-int main(void) {
-    int me, npes, i;
-    long *out;
-    double t;
-
+int main(void)
+{
     shmem_init();
+    int mype = shmem_my_pe();
+    int npes = shmem_n_pes();
 
-    me = shmem_my_pe();
-    npes = shmem_n_pes();
+    int *flags = shmem_calloc(npes, sizeof(int));
+    int *status = NULL;
 
-    out = malloc(sizeof(long) * npes);
+    for (int i = 0; i < npes; i++)
+        shmem_int_atomic_set(&flags[mype], 1, i);
 
-    /* Test blocking fetch-add */
+    shmem_int_wait_until_all(flags, npes, status, SHMEM_CMP_EQ, 1);
 
-    ctr = 0;
-    shmem_barrier_all();
-    t = shmemx_wtime();
-
-    for (i = 0; i < npes; i++) {
-        out[i] = shmem_long_atomic_fetch_add(&ctr, 1, i);
+    /* Check the flags array */
+    for (int i = 0; i < npes; i++) {
+        if (flags[i] != 1)
+            shmem_global_exit(1);
     }
 
-    shmem_barrier_all();
-    t = shmemx_wtime() - t;
-
-    if (me == 0) printf("fetch_add     %10.2fus\n", t*1000000);
-
-    if (ctr != npes)
-        shmem_global_exit(1);
-
-    for (i = 0; i < npes; i++)
-        if (!(out[i] >= 0 && out[i] < npes))
-            shmem_global_exit(2);
-
-    /* Test NBI fetch-add */
-
-    ctr = 0;
-    shmem_barrier_all();
-    t = shmemx_wtime();
-
-    for (i = 0; i < npes; i++) {
-        shmemx_long_atomic_fetch_add_nbi(&out[i], &ctr, 1, i);
-    }
-
-    shmem_barrier_all();
-    t = shmemx_wtime() - t;
-
-    if (me == 0) printf("fetch_add_nbi %10.2fus\n", t*1000000);
-
-    if (ctr != npes)
-        shmem_global_exit(1);
-
-    for (i = 0; i < npes; i++)
-        if (!(out[i] >= 0 && out[i] < npes))
-            shmem_global_exit(2);
-
+    shmem_free(flags);
     shmem_finalize();
     return 0;
 }

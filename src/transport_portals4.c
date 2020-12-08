@@ -32,6 +32,56 @@
 #include "shmem_comm.h"
 #include "runtime.h"
 
+/* Temporarily redefine SHM_INTERNAL integer types to their Portals
+ * counterparts to translate the DTYPE_* types (defined by autoconf according
+ * to system ABI) into Portals types in the table below */
+#define SHM_INTERNAL_INT8   PTL_INT8_T
+#define SHM_INTERNAL_INT16  PTL_INT16_T
+#define SHM_INTERNAL_INT32  PTL_INT32_T
+#define SHM_INTERNAL_INT64  PTL_INT64_T
+#define SHM_INTERNAL_UINT8  PTL_UINT8_T
+#define SHM_INTERNAL_UINT16 PTL_UINT16_T
+#define SHM_INTERNAL_UINT32 PTL_UINT32_T
+#define SHM_INTERNAL_UINT64 PTL_UINT64_T
+
+int shmem_transport_dtype_table[] = {
+    PTL_INT8_T,               /* SHM_INTERNAL_SIGNED_BYTE    */
+    DTYPE_SHORT,              /* SHM_INTERNAL_SHORT          */
+    DTYPE_INT,                /* SHM_INTERNAL_INT            */
+    DTYPE_LONG,               /* SHM_INTERNAL_LONG           */
+    DTYPE_LONG_LONG,          /* SHM_INTERNAL_LONG_LONG      */
+    DTYPE_FORTRAN_INTEGER,    /* SHM_INTERNAL_FORTRAN_INT    */
+    PTL_INT8_T,               /* SHM_INTERNAL_INT8           */
+    PTL_INT16_T,              /* SHM_INTERNAL_INT16          */
+    PTL_INT32_T,              /* SHM_INTERNAL_INT32          */
+    PTL_INT64_T,              /* SHM_INTERNAL_INT64          */
+    DTYPE_PTRDIFF_T,          /* SHM_INTERNAL_PTRDIFF_T      */
+    DTYPE_UNSIGNED_CHAR,      /* SHM_INTERNAL_UCHAR          */
+    DTYPE_UNSIGNED_SHORT,     /* SHM_INTERNAL_USHORT         */
+    DTYPE_UNSIGNED_INT,       /* SHM_INTERNAL_UINT           */
+    DTYPE_UNSIGNED_LONG,      /* SHM_INTERNAL_ULONG          */
+    DTYPE_UNSIGNED_LONG_LONG, /* SHM_INTERNAL_ULONG_LONG     */
+    PTL_UINT8_T,              /* SHM_INTERNAL_UINT8          */
+    PTL_UINT16_T,             /* SHM_INTERNAL_UINT16         */
+    PTL_UINT32_T,             /* SHM_INTERNAL_UINT32         */
+    PTL_UINT64_T,             /* SHM_INTERNAL_UINT64         */
+    DTYPE_SIZE_T,             /* SHM_INTERNAL_SIZE_T         */
+    PTL_FLOAT,                /* SHM_INTERNAL_FLOAT          */
+    PTL_DOUBLE,               /* SHM_INTERNAL_DOUBLE         */
+    PTL_LONG_DOUBLE,          /* SHM_INTERNAL_LONG_DOUBLE    */
+    PTL_FLOAT_COMPLEX,        /* SHM_INTERNAL_FLOAT_COMPLEX  */
+    PTL_DOUBLE_COMPLEX        /* SHM_INTERNAL_DOUBLE_COMPLEX */
+};
+
+#undef SHM_INTERNAL_INT8
+#undef SHM_INTERNAL_INT16
+#undef SHM_INTERNAL_INT32
+#undef SHM_INTERNAL_INT64
+#undef SHM_INTERNAL_UINT8
+#undef SHM_INTERNAL_UINT16
+#undef SHM_INTERNAL_UINT32
+#undef SHM_INTERNAL_UINT64
+
 int8_t shmem_transport_portals4_pt_state[SHMEM_TRANSPORT_PORTALS4_NUM_PTS] = {
     /*  0 */ PT_FREE,
     /*  1 */ PT_FREE,
@@ -74,7 +124,7 @@ int8_t shmem_transport_portals4_pt_state[SHMEM_TRANSPORT_PORTALS4_NUM_PTS] = {
 ptl_handle_ni_t shmem_transport_portals4_ni_h = PTL_INVALID_HANDLE;
 ptl_handle_md_t shmem_transport_portals4_put_event_md_h = PTL_INVALID_HANDLE;
 ptl_handle_ct_t shmem_transport_portals4_put_event_ct_h = PTL_INVALID_HANDLE;
-shmem_internal_atomic_uint64_t shmem_transport_portals4_pending_put_event_cntr;
+shmem_internal_cntr_t shmem_transport_portals4_pending_put_event_cntr;
 #if ENABLE_REMOTE_VIRTUAL_ADDRESSING
 ptl_handle_le_t shmem_transport_portals4_le_h = PTL_INVALID_HANDLE;
 #else
@@ -120,8 +170,6 @@ shmem_internal_mutex_t shmem_internal_mutex_ptl4_frag;
 shmem_internal_mutex_t shmem_internal_mutex_ptl4_event_slots;
 #endif
 
-static shmem_transport_ctx_t** shmem_transport_portals4_contexts = NULL;
-static size_t shmem_transport_portals4_contexts_len = 0;
 static size_t shmem_transport_portals4_grow_size = 128;
 
 #define SHMEM_TRANSPORT_CTX_DEFAULT_ID -1
@@ -140,8 +188,8 @@ shmem_transport_ctx_init(shmem_transport_ctx_t *ctx, long options, int id)
     ctx->get_md = PTL_INVALID_HANDLE;
     ctx->put_ct = PTL_INVALID_HANDLE;
     ctx->get_ct = PTL_INVALID_HANDLE;
-    shmem_internal_atomic_write(&ctx->pending_put_cntr, 0);
-    shmem_internal_atomic_write(&ctx->pending_get_cntr, 0);
+    shmem_internal_cntr_write(&ctx->pending_put_cntr, 0);
+    shmem_internal_cntr_write(&ctx->pending_get_cntr, 0);
 
     /* Allocate put completion tracking resources */
     ret = PtlCTAlloc(shmem_transport_portals4_ni_h, &ctx->put_ct);
@@ -220,32 +268,34 @@ cleanup:
 }
 
 int
-shmem_transport_ctx_create(long options, shmem_transport_ctx_t **ctx)
+shmem_transport_ctx_create(struct shmem_internal_team_t *team, long options, shmem_transport_ctx_t **ctx)
 {
     int ret;
     size_t id;
 
+    if (team == NULL)
+        RAISE_ERROR_STR("Context creation occured on a NULL team");
+
     SHMEM_MUTEX_LOCK(shmem_internal_mutex_ptl4_ctx);
 
     /* Look for an open slot in the contexts array */
-    for (id = 0; id < shmem_transport_portals4_contexts_len; id++)
-        if (shmem_transport_portals4_contexts[id] == NULL) break;
+    for (id = 0; id < team->contexts_len; id++)
+        if (team->contexts[id] == NULL) break;
 
     /* If none found, grow the array */
-    if (id >= shmem_transport_portals4_contexts_len) {
-        id = shmem_transport_portals4_contexts_len;
+    if (id >= team->contexts_len) {
+        id = team->contexts_len;
 
-        size_t i = shmem_transport_portals4_contexts_len;
-        shmem_transport_portals4_contexts_len += shmem_transport_portals4_grow_size;
-        shmem_transport_portals4_contexts = realloc(shmem_transport_portals4_contexts,
-               shmem_transport_portals4_contexts_len * sizeof(shmem_transport_ctx_t*));
+        size_t i = team->contexts_len;
+        team->contexts_len += shmem_transport_portals4_grow_size;
+        team->contexts = realloc(team->contexts, team->contexts_len * sizeof(shmem_transport_ctx_t*));
 
-        for ( ; i < shmem_transport_portals4_contexts_len; i++)
-            shmem_transport_portals4_contexts[i] = NULL;
-
-        if (shmem_transport_portals4_contexts == NULL) {
+        if (team->contexts == NULL) {
             RAISE_ERROR_STR("Error: out of memory when allocating ctx array");
         }
+
+        for ( ; i < team->contexts_len; i++)
+            team->contexts[i] = NULL;
     }
 
     *ctx = malloc(sizeof(shmem_transport_ctx_t));
@@ -256,15 +306,17 @@ shmem_transport_ctx_create(long options, shmem_transport_ctx_t **ctx)
 
     memset(*ctx, 0, sizeof(shmem_transport_ctx_t));
 
-    shmem_internal_atomic_write(&shmem_transport_portals4_pending_put_event_cntr, 0);
+    shmem_internal_cntr_write(&shmem_transport_portals4_pending_put_event_cntr, 0);
     ret = shmem_transport_ctx_init(*ctx, options, id);
 
     if (ret) {
         free(*ctx);
         *ctx = NULL;
     } else {
-        shmem_transport_portals4_contexts[id] = *ctx;
+        team->contexts[id] = *ctx;
     }
+
+    (*ctx)->team = team;
 
     SHMEM_MUTEX_UNLOCK(shmem_internal_mutex_ptl4_ctx);
 
@@ -282,7 +334,7 @@ shmem_transport_ctx_destroy(shmem_transport_ctx_t *ctx)
 
     if (ctx->id >= 0) {
         SHMEM_MUTEX_LOCK(shmem_internal_mutex_ptl4_ctx);
-        shmem_transport_portals4_contexts[ctx->id] = NULL;
+        ctx->team->contexts[ctx->id] = NULL;
         SHMEM_MUTEX_UNLOCK(shmem_internal_mutex_ptl4_ctx);
         free(ctx);
     }
@@ -711,6 +763,8 @@ shmem_transport_startup(void)
                                    SHMEMX_CTX_BOUNCE_BUFFER,
                                    SHMEM_TRANSPORT_CTX_DEFAULT_ID);
 
+    shmem_transport_ctx_default.team = &shmem_internal_team_world;
+
  cleanup:
     if (NULL != pe_map) free(pe_map);
     return ret;
@@ -720,26 +774,11 @@ shmem_transport_startup(void)
 int
 shmem_transport_fini(void)
 {
-    size_t i;
-
     /* synchronize the atomic cache, if there is one */
     shmem_transport_syncmem();
 
-    /* Free all contexts.  This performs a quiet on each context, ensuring all
-     * operations have completed before proceeding with shutdown. */
-
-    for (i = 0; i < shmem_transport_portals4_contexts_len; ++i) {
-        if (shmem_transport_portals4_contexts[i]) {
-            if (shmem_transport_portals4_contexts[i]->options & SHMEM_CTX_PRIVATE)
-                RAISE_WARN_MSG("Shutting down with unfreed private context (%zu)\n", i);
-            shmem_transport_quiet(shmem_transport_portals4_contexts[i]);
-            shmem_transport_ctx_destroy(shmem_transport_portals4_contexts[i]);
-        }
-    }
-
-    if (shmem_transport_portals4_contexts)
-        free(shmem_transport_portals4_contexts);
-
+    /* The default context is not inserted into the list of contexts on
+     * SHMEM_TEAM_WORLD, so it must be destroyed here */
     shmem_transport_quiet(&shmem_transport_ctx_default);
     shmem_transport_ctx_destroy(&shmem_transport_ctx_default);
 

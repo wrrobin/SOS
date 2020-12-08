@@ -25,6 +25,9 @@ shmem_internal_quiet(shmem_ctx_t ctx)
 {
     int ret;
 
+    if (ctx == SHMEM_CTX_INVALID)
+        return;
+
     ret = shmem_transport_quiet((shmem_transport_ctx_t *)ctx);
     if (0 != ret) { RAISE_ERROR(ret); }
 
@@ -43,10 +46,13 @@ shmem_internal_fence(shmem_ctx_t ctx)
 {
     int ret;
 
+    if (ctx == SHMEM_CTX_INVALID)
+        return;
+
     ret = shmem_transport_fence((shmem_transport_ctx_t *)ctx);
     if (0 != ret) { RAISE_ERROR(ret); }
 
-    shmem_internal_membar_store();
+    shmem_internal_membar_release();
 
     /* Since fence does not guarantee any memory visibility, 
      * transport level memory flush is not required here. */
@@ -79,10 +85,17 @@ shmem_internal_fence(shmem_ctx_t ctx)
         }                                                \
     } while(0)
 
+#ifdef USE_SHR_ATOMICS
+#define SYNC_LOAD(var) __atomic_load_n(var, __ATOMIC_ACQUIRE)
+#else
+#define SYNC_LOAD(var) *(var)
+#endif
+
+#define SHMEM_TEST(type, a, b, ret) COMP(type, SYNC_LOAD(a), b, ret)
 
 #define SHMEM_WAIT_POLL(var, value)                      \
     do {                                                 \
-        while (*(var) == value) {                        \
+        while (SYNC_LOAD(var) == value) {                \
             shmem_transport_probe();                     \
             if (SHMEM_CHECK_USER_YIELD_FN_EXISTS) {      \
                 if (ult_scheduling_mode) {               \
@@ -104,11 +117,11 @@ shmem_internal_fence(shmem_ctx_t ctx)
     do {                                                 \
         int cmpret;                                      \
                                                          \
-        COMP(cond, *(var), value, cmpret);               \
+        COMP(cond, SYNC_LOAD(var), value, cmpret);       \
         while (!cmpret) {                                \
             shmem_transport_probe();                     \
             SPINLOCK_BODY();                             \
-            COMP(cond, *(var), value, cmpret);           \
+            COMP(cond, SYNC_LOAD(var), value, cmpret);   \
         }                                                \
     } while(0)
 
@@ -116,10 +129,10 @@ shmem_internal_fence(shmem_ctx_t ctx)
     do {                                                                \
         uint64_t target_cntr;                                           \
                                                                         \
-        while (*(var) == value) {                                       \
+        while (SYNC_LOAD(var) == value) {                               \
             target_cntr = shmem_transport_received_cntr_get();          \
             COMPILER_FENCE();                                           \
-            if (*(var) != value) break;                                 \
+            if (SYNC_LOAD(var) != value) break;                         \
             shmem_transport_received_cntr_wait(target_cntr + 1);        \
         }                                                               \
     } while(0)
@@ -129,14 +142,14 @@ shmem_internal_fence(shmem_ctx_t ctx)
         uint64_t target_cntr;                                           \
         int cmpret;                                                     \
                                                                         \
-        COMP(cond, *(var), value, cmpret);                              \
+        COMP(cond, SYNC_LOAD(var), value, cmpret);                      \
         while (!cmpret) {                                               \
             target_cntr = shmem_transport_received_cntr_get();          \
             COMPILER_FENCE();                                           \
-            COMP(cond, *(var), value, cmpret);                          \
+            COMP(cond, SYNC_LOAD(var), value, cmpret);                  \
             if (cmpret) break;                                          \
             shmem_transport_received_cntr_wait(target_cntr + 1);        \
-            COMP(cond, *(var), value, cmpret);                          \
+            COMP(cond, SYNC_LOAD(var), value, cmpret);                  \
         }                                                               \
     } while(0)
 
@@ -154,13 +167,13 @@ shmem_internal_fence(shmem_ctx_t ctx)
 
 #define SHMEM_WAIT(var, value) do {                                     \
         SHMEM_INTERNAL_WAIT_UNTIL(var, SHMEM_CMP_NE, value);            \
-        shmem_internal_membar_load();                                   \
+        shmem_internal_membar_acq_rel();                                \
         shmem_transport_syncmem();                                      \
     } while (0)
 
 #define SHMEM_WAIT_UNTIL(var, cond, value) do {                         \
         SHMEM_INTERNAL_WAIT_UNTIL(var, cond, value);                    \
-        shmem_internal_membar_load();                                   \
+        shmem_internal_membar_acq_rel();                                \
         shmem_transport_syncmem();                                      \
     } while (0)
 

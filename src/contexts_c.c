@@ -20,6 +20,7 @@
 #include "shmem_internal.h"
 #include "transport.h"
 #include "shmem_synchronization.h"
+#include "shmem_team.h"
 
 #ifdef ENABLE_PROFILING
 #include "pshmem.h"
@@ -41,9 +42,9 @@ shmem_ctx_create(long options, shmem_ctx_t *ctx)
 {
     SHMEM_ERR_CHECK_INITIALIZED();
 
-    int ret = shmem_transport_ctx_create(options, (shmem_transport_ctx_t **) ctx);
+    int ret = shmem_transport_ctx_create(&shmem_internal_team_world, options, (shmem_transport_ctx_t **) ctx);
 
-    SHMEM_ERR_CHECK_NULL(ctx, 0);
+    if (0 != ret) *ctx = SHMEM_CTX_INVALID;
 
     return ret;
 }
@@ -53,6 +54,9 @@ SHMEM_FUNCTION_ATTRIBUTES void
 shmem_ctx_destroy(shmem_ctx_t ctx)
 {
     SHMEM_ERR_CHECK_INITIALIZED();
+
+    if (ctx == SHMEM_CTX_INVALID)
+        return;
 
     if (ctx == SHMEM_CTX_DEFAULT) {
         fprintf(stderr, "ERROR: %s(): SHMEM_CTX_DEFAULT cannot be destroyed\n",

@@ -11,20 +11,7 @@
 # information, see the LICENSE file in the top level directory of the
 # distribution.
 
-check_PROGRAMS = \
-	shmemx_wait_until_all \
-	shmemx_wait_until_any \
-	shmemx_wait_until_some \
-	shmemx_test_all \
-	shmemx_test_any \
-	shmemx_test_some \
-	c11_test_shmemx_wait_until \
-	c11_test_shmemx_test
-
-if ENABLE_PROFILING
-check_PROGRAMS += \
-	pcontrol
-endif
+check_PROGRAMS =
 
 if USE_PORTALS4
 check_PROGRAMS += \
@@ -32,13 +19,8 @@ check_PROGRAMS += \
 endif
 
 if SHMEMX_TESTS
-
 check_PROGRAMS += \
-	perf_counter \
-	fadd_nbi \
-	atomic_nbi \
-	put_signal \
-	put_signal_nbi
+	perf_counter
 
 if HAVE_PTHREADS
 check_PROGRAMS += \

@@ -1,9 +1,5 @@
 /*
- * Copyright 2011 Sandia Corporation. Under the terms of Contract
- * DE-AC04-94AL85000 with Sandia Corporation, the U.S.  Government
- * retains certain rights in this software.
- *
- *  Copyright (c) 2017 Intel Corporation. All rights reserved.
+ *  Copyright (c) 2019 Intel Corporation. All rights reserved.
  *  This software is available to you under the BSD license below:
  *
  *      Redistribution and use in source and binary forms, with or
@@ -32,20 +28,46 @@
 #include <stdio.h>
 #include <stdlib.h>
 #include <shmem.h>
-#include <shmemx.h>
 
-int
-main(int argc, char* argv[], char *envp[])
+
+int main(void)
 {
+    static long lock = 0;
+
     shmem_init();
+    int me = shmem_my_pe();
+    int npes = shmem_n_pes();
 
-    shmemx_pcontrol(1, "Region 1");
-    shmem_barrier_all();
+    int team_shared_npes = shmem_team_n_pes(SHMEM_TEAM_SHARED);
 
-    shmemx_pcontrol(1, "Region 2");
-    shmem_barrier_all();
+    int *peers = malloc(team_shared_npes * sizeof(int));
+    int num_peers = 0;
 
+    /* Print the team members on SHMEM_TEAM_SHARED */
+    /* Use a lock for cleaner output */
+    shmem_set_lock(&lock);
+
+    printf("[PE: %d] SHMEM_TEAM_SHARED peers: { ", me);
+    for (int i = 0; i < npes; i++) {
+        if (shmem_team_translate_pe(SHMEM_TEAM_WORLD, i,
+                                     SHMEM_TEAM_SHARED) != -1) {
+            peers[num_peers++] = i;
+            printf("%d ", i);
+        }
+    }
+
+    printf("} (num_peers: %d)\n", num_peers);
+
+    fflush(NULL);
+
+    shmem_clear_lock(&lock);
+
+    if (num_peers != team_shared_npes) {
+        shmem_global_exit(1);
+    }
+
+    free(peers);
     shmem_finalize();
-
     return 0;
 }
+  
