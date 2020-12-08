@@ -20,7 +20,6 @@
 #include "shmem_internal.h"
 #include "transport.h"
 #include "shmem_synchronization.h"
-//#include "shmem_fiber.h"
 
 #ifdef ENABLE_PROFILING
 #include "pshmem.h"
