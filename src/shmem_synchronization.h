@@ -107,7 +107,7 @@ shmem_internal_fence(shmem_ctx_t ctx)
         COMP(cond, *(var), value, cmpret);               \
         while (!cmpret) {                                \
             shmem_transport_probe();                     \
-            SPINLOCK_BODY();                         \
+            SPINLOCK_BODY();                             \
             COMP(cond, *(var), value, cmpret);           \
         }                                                \
     } while(0)
