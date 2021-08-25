@@ -185,6 +185,14 @@ AS_IF([test "$enable_profiling" = "yes"],
              [AC_MSG_ERROR("Profiling interface requires weak symbols support")])
        ])
 
+AC_ARG_ENABLE([shmemt],
+    [AC_HELP_STRING([--enable-shmemt],
+                    [Enable tools interface (default:disabled)])])
+
+AS_IF([test "$enable_shmemt" = "yes"], 
+      [AC_DEFINE([ENABLE_TOOLS], [1], [Enable tools interface])], 
+      [])
+
 AC_ARG_ENABLE([long-fortran-header],
     [AC_HELP_STRING([--enable-long-fortran-header],
                     [Enable long Fortran header, including all function declarations (default:disabled)])])

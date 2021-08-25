@@ -34,3 +34,26 @@ SHMEM_FUNCTION_ATTRIBUTES void SHPRE()shmemx_pcntr_get_completed_write(shmem_ctx
 SHMEM_FUNCTION_ATTRIBUTES void SHPRE()shmemx_pcntr_get_completed_read(shmem_ctx_t ctx, uint64_t *cntr_value);
 SHMEM_FUNCTION_ATTRIBUTES void SHPRE()shmemx_pcntr_get_completed_target(uint64_t *cntr_value);
 SHMEM_FUNCTION_ATTRIBUTES void SHPRE()shmemx_pcntr_get_all(shmem_ctx_t ctx, shmemx_pcntr_t *pcntr);
+
+#ifdef ENABLE_TOOLS
+/*********************** Tools interface **************************/
+/* Initialize and finalize routines */
+SHMEM_FUNCTION_ATTRIBUTES void SHPRE()shmemx_t_init_thread(int requested, int *provided);
+SHMEM_FUNCTION_ATTRIBUTES void SHPRE()shmemx_t_finalize(void);
+
+/* Summary of variable routines */
+SHMEM_FUNCTION_ATTRIBUTES void SHPRE()shmemx_t_var_get_num(int *num, int type);
+SHMEM_FUNCTION_ATTRIBUTES void SHPRE()shmemx_t_var_avail(shmemx_t_var **list_vars], int type);
+
+/* Get variable routines */
+SHMEM_FUNCTION_ATTRIBUTES uint64_t SHPRE()shmemx_t_get_var(int type, int category, int subcategory, int bind, int operation, int class);
+
+/* Allocate and free handle routines */
+SHMEM_FUNCTION_ATTRIBUTES void SHPRE()shmemx_t_var_handle_alloc(shmemx_t_handle_config_t handle_config, shmemx_t_var_handle_t *handle);
+SHMEM_FUNCTION_ATTRIBUTES void SHPRE()shmemx_t_var_handle_free(shmemx_t_var_handle_t handle);
+
+/* Read and reset routines */
+SHMEM_FUNCTION_ATTRIBUTES int SHPRE()shmemx_t_var_reset(shmemx_t_var_handle_t handle, int val);
+SHMEM_FUNCTION_ATTRIBUTES int SHPRE()shmemx_t_var_read(shmemx_t_var_handle_t handle, void *buf);
+SHMEM_FUNCTION_ATTRIBUTES int SHPRE()shmemx_t_var_list_read(shmemx_t_var_handle_t *handles, void **buf);
+#endif /* SHMEM_T */
