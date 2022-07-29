@@ -42,6 +42,7 @@
 #include <sys/personality.h>
 #endif
 
+#if !defined(DISABLE_DATA_SEGMENT)
 #ifdef __APPLE__
 #include <mach-o/getsect.h>
 #else
@@ -53,10 +54,12 @@ extern int __data_start;
 extern int _end;
 #endif
 
-void *shmem_internal_heap_base = NULL;
-long shmem_internal_heap_length = 0;
 void *shmem_internal_data_base = NULL;
 long shmem_internal_data_length = 0;
+#endif
+
+void *shmem_internal_heap_base = NULL;
+long shmem_internal_heap_length = 0;
 
 int shmem_internal_my_pe = -1;
 int shmem_internal_num_pes = -1;
@@ -112,6 +115,8 @@ shmem_internal_shutdown(void)
     shmem_internal_barrier_all();
 
     shmem_internal_finalized = 1;
+
+    shmem_transport_progress_thread_fini();
 
     shmem_internal_team_fini();
 
@@ -281,6 +286,7 @@ shmem_internal_init(int tl_requested, int *tl_provided)
 #endif /* ENABLE_REMOTE_VIRTUAL_ADDRESSING */
 
 
+#if !defined(DISABLE_DATA_SEGMENT)
     /* Find symmetric data */
 #ifdef __APPLE__
     shmem_internal_data_base = (void*) get_etext();
@@ -304,9 +310,11 @@ shmem_internal_init(int tl_requested, int *tl_provided)
         RETURN_ERROR_MSG("Unable to locate symmetric data segment (%p, %p)\n",
                          (void*) &__data_start, (void*) &_end);
 
+    fprintf(stderr, "I am here\n");
     shmem_internal_data_base = (void*) &__data_start;
     shmem_internal_data_length = (long) ((char*) &_end - (char*) &__data_start);
 #endif
+#endif /* !DISABLE_DATA_SEGMENT */
 
     /* create symmetric heap */
     ret = shmem_internal_symmetric_init();
@@ -315,6 +323,15 @@ shmem_internal_init(int tl_requested, int *tl_provided)
         goto cleanup;
     }
 
+#ifdef DISABLE_DATA_SEGMENT
+    DEBUG_MSG("Thread level=%s, Num. PEs=%d\n"
+              RAISE_PE_PREFIX
+              "Sym. heap=%p len=%ld\n",
+              shmem_internal_thread_level_str[shmem_internal_thread_level],
+              shmem_internal_num_pes,
+              shmem_internal_my_pe,
+              shmem_internal_heap_base, shmem_internal_heap_length);
+#else
     DEBUG_MSG("Thread level=%s, Num. PEs=%d\n"
               RAISE_PE_PREFIX
               "Sym. heap=%p len=%ld -- data=%p len=%ld\n",
@@ -323,6 +340,7 @@ shmem_internal_init(int tl_requested, int *tl_provided)
               shmem_internal_my_pe,
               shmem_internal_heap_base, shmem_internal_heap_length,
               shmem_internal_data_base, shmem_internal_data_length);
+#endif
 
 #ifdef HAVE_SCHED_GETAFFINITY
     if (shmem_internal_params.DEBUG) {
@@ -419,6 +437,8 @@ shmem_internal_init(int tl_requested, int *tl_provided)
     shmem_internal_randr_init();
     randr_initialized = 1;
 
+    shmem_transport_progress_thread_init();
+
     atexit(shmem_internal_shutdown_atexit);
     shmem_internal_initialized = 1;
 
@@ -445,7 +465,7 @@ shmem_internal_init(int tl_requested, int *tl_provided)
         shmem_internal_team_fini();
     }
 
-    if (NULL != shmem_internal_data_base) {
+    if (NULL != shmem_internal_heap_base) {
         shmem_internal_symmetric_fini();
     }
     if (runtime_initialized) {

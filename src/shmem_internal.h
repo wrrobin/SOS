@@ -39,8 +39,11 @@ extern int shmem_internal_thread_level;
 
 extern void *shmem_internal_heap_base;
 extern long shmem_internal_heap_length;
+
+#if !defined(DISABLE_DATA_SEGMENT)
 extern void *shmem_internal_data_base;
 extern long shmem_internal_data_length;
+#endif
 
 extern unsigned int shmem_internal_rand_seed;
 

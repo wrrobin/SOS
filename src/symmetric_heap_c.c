@@ -163,9 +163,11 @@ static void *mmap_alloc(size_t bytes)
     char *file_name = NULL;
     int fd = 0;
     char *directory = NULL;
-    void *requested_base =
-        (void*) (((unsigned long) shmem_internal_data_base +
+    void *requested_base = NULL;
+#if !defined(DISABLE_DATA_SEGMENT)
+    requested_base = (void*) (((unsigned long) shmem_internal_data_base +
                   shmem_internal_data_length + 2 * ONEGIG) & ~(ONEGIG - 1));
+#endif
     void *ret;
 
 #ifdef __linux__
@@ -239,9 +241,13 @@ shmem_internal_symmetric_init(void)
             shmem_internal_heap_curr =
             mmap_alloc(shmem_internal_heap_length);
     } else {
-        shmem_internal_heap_base =
+/*        shmem_internal_heap_base =
             shmem_internal_heap_curr =
-            malloc(shmem_internal_heap_length);
+            malloc(shmem_internal_heap_length);*/
+        int pagesize = sysconf(_SC_PAGESIZE);
+        posix_memalign(&shmem_internal_heap_base, pagesize, shmem_internal_heap_length);
+        shmem_internal_heap_curr = shmem_internal_heap_base;
+        fprintf(stderr, "Using posix memalign\n");
     }
 
     return (NULL == shmem_internal_heap_base) ? -1 : 0;

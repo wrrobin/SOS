@@ -255,6 +255,11 @@ AC_ARG_ENABLE([shr-atomics],
 AS_IF([test "$enable_shr_atomics" = "yes"],
       [AC_DEFINE([USE_SHR_ATOMICS], [1], [If defined, the shared memory layer will perform processor atomics.])])
 
+AC_ARG_ENABLE([data-segment],
+    [AC_HELP_STRING([--disable-data-segment],
+                    [Disable data segment and keep only symmetric heap. (default: enabled)])])
+AS_IF([test "$enable_data_segment" = "no"],
+      [AC_DEFINE([DISABLE_DATA_SEGMENT], [1], [If defined, the data segment will not be used.])])
 
 PKG_INSTALLDIR()
 

@@ -32,6 +32,7 @@
 #include "shmem_atomic.h"
 #include "shmem_team.h"
 #include <sys/types.h>
+#include <pthread.h>
 
 
 #if !defined(ENABLE_HARD_POLLING)
@@ -48,12 +49,16 @@ extern struct fid_cq*                   shmem_transport_ofi_target_cq;
 #endif
 #ifndef ENABLE_MR_SCALABLE
 extern uint64_t*                        shmem_transport_ofi_target_heap_keys;
+#ifndef DISABLE_DATA_SEGMENT
 extern uint64_t*                        shmem_transport_ofi_target_data_keys;
+#endif
 #ifdef ENABLE_REMOTE_VIRTUAL_ADDRESSING
 extern int                              shmem_transport_ofi_use_absolute_address;
 #else
 extern uint8_t**                        shmem_transport_ofi_target_heap_addrs;
+#ifndef DISABLE_DATA_SEGMENT
 extern uint8_t**                        shmem_transport_ofi_target_data_addrs;
+#endif
 #endif /* ENABLE_REMOTE_VIRTUAL_ADDRESSING */
 #endif /* ENABLE_MR_SCALABLE */
 extern uint64_t                         shmem_transport_ofi_max_poll;
@@ -126,13 +131,16 @@ void shmem_transport_ofi_get_mr(const void *addr, int dest_pe,
     *key = 0;
     *mr_addr = (uint8_t*) addr;
 #else
+#ifndef DISABLE_DATA_SEGMENT
     if ((void*) addr >= shmem_internal_data_base &&
         (uint8_t*) addr < (uint8_t*) shmem_internal_data_base + shmem_internal_data_length) {
 
         *key = 0;
         *mr_addr = (uint8_t*) ((uint8_t *) addr - (uint8_t *) shmem_internal_data_base);
 
-    } else if ((void*) addr >= shmem_internal_heap_base &&
+    } else 
+#endif
+    if ((void*) addr >= shmem_internal_heap_base &&
                (uint8_t*) addr < (uint8_t*) shmem_internal_heap_base + shmem_internal_heap_length) {
 
         *key = 1;
@@ -150,6 +158,7 @@ void shmem_transport_ofi_get_mr(const void *addr, int dest_pe,
 static inline
 void shmem_transport_ofi_get_mr(const void *addr, int dest_pe,
                                 uint8_t **mr_addr, uint64_t *key) {
+#ifndef DISABLE_DATA_SEGMENT
     if ((void*) addr >= shmem_internal_data_base &&
         (uint8_t*) addr < (uint8_t*) shmem_internal_data_base + shmem_internal_data_length) {
         *key = shmem_transport_ofi_target_data_keys[dest_pe];
@@ -164,7 +173,9 @@ void shmem_transport_ofi_get_mr(const void *addr, int dest_pe,
 #endif
     }
 
-    else if ((void*) addr >= shmem_internal_heap_base &&
+    else 
+#endif
+    if ((void*) addr >= shmem_internal_heap_base &&
              (uint8_t*) addr < (uint8_t*) shmem_internal_heap_base + shmem_internal_heap_length) {
         *key = shmem_transport_ofi_target_heap_keys[dest_pe];
 #ifdef ENABLE_REMOTE_VIRTUAL_ADDRESSING
@@ -310,6 +321,10 @@ extern struct fid_ep* shmem_transport_ofi_target_ep;
             shmem_free_list_unlock(ctx->bounce_buffers);                        \
     } while (0)
 
+void shmem_transport_progress_thread_init(void);
+void shmem_transport_progress_thread_fini(void);
+void shmem_transport_full_probe(void);
+
 static inline
 void shmem_transport_probe(void)
 {
@@ -321,6 +336,10 @@ void shmem_transport_probe(void)
         int ret = fi_cq_read(shmem_transport_ofi_target_cq, &buf, 1);
         if (ret == 1)
             RAISE_WARN_STR("Unexpected event");
+        ret = fi_cq_read(shmem_transport_ctx_default.cq, &buf, 1);
+        if (ret == 1)
+            RAISE_WARN_STR("Unexpected event");
+
 #  ifdef USE_THREAD_COMPLETION
         pthread_mutex_unlock(&shmem_transport_ofi_progress_lock);
     }
@@ -623,8 +642,8 @@ void shmem_transport_put_nb(shmem_transport_ctx_t* ctx, void *target, const void
 
         shmem_transport_put_scalar(ctx, target, source, len, pe);
 
-    } else if (len <= shmem_transport_ofi_bounce_buffer_size && ctx->bounce_buffers) {
-
+//    } else if (len <= shmem_transport_ofi_bounce_buffer_size && ctx->bounce_buffers) {
+    } else {
         SHMEM_TRANSPORT_OFI_CTX_LOCK(ctx);
         SHMEM_TRANSPORT_OFI_CNTR_INC(&ctx->pending_put_cntr);
         shmem_transport_ofi_get_mr(target, pe, &addr, &key);
@@ -650,10 +669,10 @@ void shmem_transport_put_nb(shmem_transport_ctx_t* ctx, void *target, const void
         } while (try_again(ctx, ret, &polled));
         SHMEM_TRANSPORT_OFI_CTX_UNLOCK(ctx);
 
-    } else {
+    } /*else {
         shmem_transport_ofi_put_large(ctx, target, source,len, pe);
         (*completion)++;
-    }
+    }*/
 }
 
 static inline

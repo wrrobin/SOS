@@ -36,10 +36,12 @@ shmem_internal_addr_accessible(const void *addr, int pe)
         (char*) addr < (char*) shmem_internal_heap_base + shmem_internal_heap_length) {
         return 1;
     }
+#if !defined(DISABLE_DATA_SEGMENT)
     if ((char*) addr >= (char*) shmem_internal_data_base &&
         (char*) addr < (char*) shmem_internal_data_base + shmem_internal_data_length) {
         return 1;
     }
+#endif
 
     return 0;
 }
