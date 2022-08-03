@@ -720,7 +720,7 @@ int allocate_recv_cntr_mr(void)
 
         /* Create counter for incoming writes */
         cntr_attr.events   = FI_CNTR_EVENTS_COMP;
-        cntr_attr.wait_obj = FI_WAIT_NONE;
+        cntr_attr.wait_obj = FI_WAIT_UNSPEC;
 
         ret = fi_cntr_open(shmem_transport_ofi_domainfd, &cntr_attr,
                            &shmem_transport_ofi_target_cntrfd, NULL);
@@ -1294,7 +1294,7 @@ int query_for_fabric(struct fabric_info *info)
 #endif
     hints.addr_format         = FI_FORMAT_UNSPEC;
     domain_attr.data_progress = FI_PROGRESS_MANUAL;
-    domain_attr.control_progress = FI_PROGRESS_MANUAL;
+//    domain_attr.control_progress = FI_PROGRESS_MANUAL;
     domain_attr.resource_mgmt = FI_RM_ENABLED;
 #ifdef ENABLE_MR_SCALABLE
                                 /* Scalable, offset-based addressing, formerly FI_MR_SCALABLE */
@@ -1449,7 +1449,7 @@ static int shmem_transport_ofi_target_ep_init(void)
      OFI_CHECK_RETURN_MSG(ret, "cq_open failed (%s)\n", fi_strerror(errno));
 
      ret = fi_ep_bind(shmem_transport_ofi_target_ep,
-                      &shmem_transport_ofi_target_cq->fid, FI_SELECTIVE_COMPLETION | FI_TRANSMIT | FI_RECV);
+                      &shmem_transport_ofi_target_cq->fid, FI_TRANSMIT | FI_RECV);
      OFI_CHECK_RETURN_STR(ret, "fi_ep_bind CQ to target endpoint failed");
 
      /*ret = fi_ep_bind(shmem_transport_ofi_target_ep,
