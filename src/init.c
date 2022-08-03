@@ -116,7 +116,7 @@ shmem_internal_shutdown(void)
 
     shmem_internal_finalized = 1;
 
-    shmem_transport_progress_thread_fini();
+    //shmem_transport_progress_thread_fini();
 
     shmem_internal_team_fini();
 
@@ -437,7 +437,7 @@ shmem_internal_init(int tl_requested, int *tl_provided)
     shmem_internal_randr_init();
     randr_initialized = 1;
 
-    shmem_transport_progress_thread_init();
+    //shmem_transport_progress_thread_init();
 
     atexit(shmem_internal_shutdown_atexit);
     shmem_internal_initialized = 1;

@@ -163,7 +163,6 @@ static void *shmem_transport_ofi_progress_thread_func(void *arg)
 {
     while (__atomic_load_n(&shmem_transport_ofi_progress_thread_enabled, __ATOMIC_ACQUIRE)) {
         shmem_transport_full_probe();
-//        fprintf(stdout, "Going\n");
         usleep(shmem_internal_params.PROGRESS_INTERVAL);
     }
     return NULL;
@@ -685,12 +684,12 @@ int bind_enable_ep_resources(shmem_transport_ctx_t *ctx)
      * FI_RECV significantly improves performance or resource usage.  */
 
     ret = fi_ep_bind(ctx->ep, &ctx->cq->fid,
-                     FI_SELECTIVE_COMPLETION | FI_TRANSMIT);
+                     FI_SELECTIVE_COMPLETION | FI_TRANSMIT | FI_RECV);
     OFI_CHECK_RETURN_STR(ret, "fi_ep_bind CQ to endpoint failed");
 
-    ret = fi_ep_bind(ctx->ep, &ctx->cq->fid, FI_RECV);
+    /*ret = fi_ep_bind(ctx->ep, &ctx->cq->fid, FI_RECV);
     OFI_CHECK_RETURN_STR(ret, "fi_ep_bind CQ to endpoint failed");
-
+*/
     ret = fi_ep_bind(ctx->ep, &shmem_transport_ofi_avfd->fid, 0);
     OFI_CHECK_RETURN_STR(ret, "fi_ep_bind AV to endpoint failed");
 
@@ -721,7 +720,7 @@ int allocate_recv_cntr_mr(void)
 
         /* Create counter for incoming writes */
         cntr_attr.events   = FI_CNTR_EVENTS_COMP;
-        cntr_attr.wait_obj = FI_WAIT_UNSPEC;
+        cntr_attr.wait_obj = FI_WAIT_NONE;
 
         ret = fi_cntr_open(shmem_transport_ofi_domainfd, &cntr_attr,
                            &shmem_transport_ofi_target_cntrfd, NULL);
@@ -759,7 +758,7 @@ int allocate_recv_cntr_mr(void)
     /* Register separate data and heap segments using keys 0 and 1,
      * respectively.  In MR_BASIC_MODE, the keys are ignored and selected by
      * the provider. */
-    uint64_t key = 1ULL;
+    uint64_t key = 0;
     ret = fi_mr_reg(shmem_transport_ofi_domainfd, shmem_internal_heap_base,
                     shmem_internal_heap_length,
                     FI_REMOTE_READ | FI_REMOTE_WRITE, 0, key, flags,
@@ -767,7 +766,7 @@ int allocate_recv_cntr_mr(void)
     OFI_CHECK_RETURN_STR(ret, "target memory (heap) registration failed");
 
 #if !defined(DISABLE_DATA_SEGMENT)
-    key = 0ULL;
+    key = 1;
     ret = fi_mr_reg(shmem_transport_ofi_domainfd, shmem_internal_data_base,
                     shmem_internal_data_length,
                     FI_REMOTE_READ | FI_REMOTE_WRITE, 0, key, flags,
@@ -788,6 +787,31 @@ int allocate_recv_cntr_mr(void)
                      FI_REMOTE_WRITE);
     OFI_CHECK_RETURN_STR(ret, "target CNTR binding to data MR failed");
 #  endif
+
+    if (shmem_transport_ofi_info.p_info->domain_attr->mr_mode & FI_MR_ENDPOINT) {
+        fprintf(stderr, "mr endpoint\n");
+
+        ret = fi_ep_bind(shmem_transport_ofi_target_ep,
+                         &shmem_transport_ofi_target_cntrfd->fid, FI_REMOTE_WRITE);
+        OFI_CHECK_RETURN_STR(ret, "target EP binding to target counter failed");
+
+        ret = fi_mr_bind(shmem_transport_ofi_target_heap_mrfd, 
+                         &shmem_transport_ofi_target_ep->fid, FI_REMOTE_WRITE);
+        OFI_CHECK_RETURN_STR(ret, "target EP binding to heap MR failed");
+
+        ret = fi_mr_enable(shmem_transport_ofi_target_heap_mrfd);
+        OFI_CHECK_RETURN_STR(ret, "target heap MR enable failed");
+
+#  if !defined(DISABLE_DATA_SEGMENT)
+        ret = fi_mr_bind(shmem_transport_ofi_target_data_mrfd,
+                         &shmem_transport_ofi_target_ep->fid,
+                         FI_REMOTE_WRITE);
+        OFI_CHECK_RETURN_STR(ret, "target CNTR binding to data MR failed");
+
+        ret = fi_mr_enable(shmem_transport_ofi_target_data_mrfd);
+        OFI_CHECK_RETURN_STR(ret, "target data MR enable failed");
+#  endif
+    }
 
 #ifdef ENABLE_MR_RMA_EVENT
     if (shmem_transport_ofi_mr_rma_event) {
@@ -821,9 +845,9 @@ int publish_mr_info(void)
             data_key = fi_mr_key(shmem_transport_ofi_target_data_mrfd);
 #endif
         } else {
-            heap_key = 1ULL;
+            heap_key = 0;
 #ifndef DISABLE_DATA_SEGMENT
-            data_key = 0ULL;
+            data_key = 1;
 #endif
         }
 

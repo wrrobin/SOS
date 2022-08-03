@@ -182,7 +182,7 @@ shmem_internal_fence(shmem_ctx_t ctx)
 #else
 #define SHMEM_INTERNAL_WAIT_UNTIL(var, cond, value)                     \
     if (shmem_internal_thread_level == SHMEM_THREAD_SINGLE) {           \
-        SHMEM_WAIT_UNTIL_BLOCK(var, cond, value);                       \
+        SHMEM_WAIT_UNTIL_POLL(var, cond, value);                       \
     } else {                                                            \
         SHMEM_WAIT_UNTIL_POLL(var, cond, value);                        \
     }
