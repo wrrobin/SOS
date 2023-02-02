@@ -48,7 +48,7 @@ static int thread_scheduler_initialized = 0;
 uint64_t total_threads;
 uint64_t num_shepherds;
 uint64_t threads_per_shepherd;
-int *thread_priority;
+//int *thread_priority;
 static int vip_thread_state = -1;
 uint64_t *registered_threads;
 
@@ -72,13 +72,13 @@ void shmem_internal_thread_scheduler_init(uint64_t num_hw_threads, uint64_t num_
     num_shepherds = num_hw_threads;
     total_threads = num_ul_threads;
     threads_per_shepherd = num_ul_threads / num_hw_threads;
-    thread_priority = priority_list;
-    vip_thread_state = thread_priority[0] == 2 ? 0 : (thread_priority[1] == 2 ? 1 : (thread_priority[2] == 2 ? 2 : -1));
+    //thread_priority = priority_list;
+    //vip_thread_state = thread_priority[0] == 2 ? 0 : (thread_priority[1] == 2 ? 1 : (thread_priority[2] == 2 ? 2 : -1));
 
     if (log_verbose && shmem_internal_my_pe == 0) {
         fprintf(stderr, "Number of shepherds %lu, number of ults %lu\n", num_shepherds, total_threads);
-        fprintf(stderr, "Thread priority set to: PUT: %d, GET: %d, WAIT: %d\n", thread_priority[0], thread_priority[1], thread_priority[2]);
-        fprintf(stderr, "The highest priority thread state is %d\n", vip_thread_state);
+    //    fprintf(stderr, "Thread priority set to: PUT: %d, GET: %d, WAIT: %d\n", thread_priority[0], thread_priority[1], thread_priority[2]);
+    //    fprintf(stderr, "The highest priority thread state is %d\n", vip_thread_state);
     }
 
     pending_fiber_ll = (shmem_fiber **) calloc(num_shepherds, sizeof(shmem_fiber *));
@@ -87,6 +87,14 @@ void shmem_internal_thread_scheduler_init(uint64_t num_hw_threads, uint64_t num_
     next_runnable = (shmem_fiber **) calloc(num_shepherds, sizeof(shmem_fiber *));
     current_runnable_thread_count = (uint64_t *) calloc(num_shepherds, sizeof(uint64_t));
     registered_threads = (uint64_t *) calloc(num_shepherds, sizeof(uint64_t));
+
+    int i;
+    for (i = 0; i < num_shepherds; i++) {
+        pending_fiber_ll[i] = (shmem_fiber *) calloc(1, sizeof(shmem_fiber));
+        next_runnable[i] = (shmem_fiber *) calloc(1, sizeof(shmem_fiber));
+        pending_fiber_ll[i]->thread_user_id = -1;
+        next_runnable[i]->thread_user_id = -1;
+    }
 
     thread_scheduler_initialized = 1;
 }
@@ -123,24 +131,25 @@ void shmem_internal_thread_scheduler_register(void) {
 }
 
 static inline void append(int shepherd, shmem_fiber* temp) {
-    if (pending_fiber_ll[shepherd] == NULL) {
-        pending_fiber_ll[shepherd] = temp;
-    } else {
-        shmem_fiber *last = pending_fiber_ll[shepherd];
-        while (last->next != NULL) {
-            last = last->next;
-        }
-        last->next = temp;
+    shmem_fiber *last = pending_fiber_ll[shepherd];
+    while (last->next != NULL) {
+        last = last->next;
     }
+    last->next = temp;
     pending_fiber_ll_size[shepherd]++;
 }
 
 static inline void display_ll(int shepherd, uint64_t update, int op) {
+    if (op == 1) {
+        fprintf(stderr, "[SHPHRD %d] Deleted value %lu\n", shepherd, update);
+    } else if (op == 2) {
+        fprintf(stderr, "[SHPHRD %d] Updated value %lu\n", shepherd, update);
+    } else if (op == 3) {
+        fprintf(stderr, "[SHPHRD %d] Chose value %lu\n", shepherd, update);
+    } else {
+        fprintf(stderr, "[SHPHRD %d] Added value %lu\n", shepherd, update);
+    }
     shmem_fiber *temp = pending_fiber_ll[shepherd];
-    if (op == 1) fprintf(stderr, "[SHPHRD %d] Deleted value %lu\n", shepherd, update);
-    else if (op == 2) fprintf(stderr, "[SHPHRD %d] Updated value %lu\n", shepherd, update);
-    else if (op == 3) fprintf(stderr, "[SHPHRD %d] Chose value %lu\n", shepherd, update);
-    else fprintf(stderr, "[SHPHRD %d] Added value %lu\n", shepherd, update);
     fprintf(stderr, "[SHPHRD %d] LL: ", shepherd);
     while (temp != NULL) {
         fprintf(stderr, "%lu->", temp->thread_user_id);
@@ -163,6 +172,9 @@ static int shmem_internal_add_to_thread_queue(shmem_ctx_t *ctx, int reason, int 
     int tid_exists = 0;
 
     shmem_fiber *temp = pending_fiber_ll[shepherd], *prev_temp = NULL;
+
+    if (log_verbose && shmem_internal_my_pe == 0) fprintf(stderr, "Came here for tid %lu and %d\n", tid, (temp == NULL));
+
     while (temp != NULL) {
         if (temp->thread_user_id == tid) {
             temp->attached_ctx = ctx;
@@ -195,26 +207,38 @@ static int shmem_internal_add_to_thread_queue(shmem_ctx_t *ctx, int reason, int 
         temp = temp->next;
     }
 
+    if (log_verbose && shmem_internal_my_pe == 0) fprintf(stderr, "tid %lu exists? %d\n", tid, tid_exists);
+
     if (!tid_exists) {
-        shmem_fiber *temp = (shmem_fiber *) malloc(sizeof(shmem_fiber));
-        temp->thread_user_id = tid;
-        temp->fiber_handle = shmem_internal_get_thread_handle_fn();
-        temp->attached_ctx = ctx;
-        temp->fiber_blocked_reason = reason;
+        shmem_fiber *new_fiber = (shmem_fiber *) malloc(sizeof(shmem_fiber));
+        new_fiber->thread_user_id = tid;
+        new_fiber->fiber_handle = shmem_internal_get_thread_handle_fn();
+        new_fiber->attached_ctx = ctx;
+        new_fiber->fiber_blocked_reason = reason;
         if (var != NULL) {
-            temp->wait_var = var;
-            temp->wait_cond = cond;
-            temp->wait_val = value;
+            new_fiber->wait_var = var;
+            new_fiber->wait_cond = cond;
+            new_fiber->wait_val = value;
         }
-        temp->is_waiting = 1;
-        temp->is_runnable = 0;
-        temp->next = NULL;
+        new_fiber->is_waiting = 1;
+        new_fiber->is_runnable = 0;
+        new_fiber->next = NULL;
 
-        append(shepherd, temp);
+        if (pending_fiber_ll_size[shepherd] == 0) {
+            pending_fiber_ll[shepherd] = new_fiber;
+            pending_fiber_ll_size[shepherd] = 1;
+        }
+        else {
+            append(shepherd, new_fiber);
+        }
 
-        if (log_verbose && shmem_internal_my_pe == 0) display_ll(shepherd, tid, 0);
+        if (log_verbose && shmem_internal_my_pe == 0) {
+            display_ll(shepherd, tid, 0);
+        }
     } else {
-        if (log_verbose && shmem_internal_my_pe == 0) display_ll(shepherd, tid, 2);
+        if (log_verbose && shmem_internal_my_pe == 0) {
+            display_ll(shepherd, tid, 2);
+        }
     }
     return 0;
 }
@@ -241,12 +265,12 @@ void shmem_internal_remove_from_thread_queue(void) {
             if (ret->is_runnable) current_runnable_thread_count[shepherd]--;
             pending_fiber_ll_size[shepherd]--;
             free(ret);
+            if (log_verbose && shmem_internal_my_pe == 0) display_ll(shepherd, tid, 1);
             break;
         }
         prev_ret = ret;
         ret = ret->next;
     }
-    if (log_verbose && shmem_internal_my_pe == 0) display_ll(shepherd, tid, 1);
 }
 
 #define COMP(type, a, b, ret)                            \
@@ -289,7 +313,7 @@ int shmem_internal_runnable_thread_exists(shmem_ctx_t *ctx, int reason, long *va
     int shepherd;
     shmem_internal_getultinfo_fn(&shepherd, &caller_tid);
 
-    if (thread_priority[reason] != 0)
+    //if (thread_priority[reason] != 0)
         shmem_internal_add_to_thread_queue(ctx, reason, shepherd, caller_tid, var, cond, value);
 
     if (pending_fiber_ll[shepherd] == NULL) {
