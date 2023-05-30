@@ -104,30 +104,59 @@ AC_DEFUN([OMPI_CHECK_UCX],[
                   old_CPPFLAGS="$CPPFLAGS"
                   AS_IF([test -n "$ompi_check_ucx_dir"],
                         [CPPFLAGS="$CPPFLAGS -I$ompi_check_ucx_dir/include"])
-                  AC_CHECK_DECLS([ucp_tag_send_nbr],
-                                 [AC_DEFINE([HAVE_UCP_TAG_SEND_NBR],[1],
-                                            [have ucp_tag_send_nbr()])], [],
-                                 [#include <ucp/api/ucp.h>])
-                  AC_CHECK_DECLS([ucp_ep_flush_nb, ucp_worker_flush_nb,
-                                  ucp_request_check_status, ucp_put_nb, ucp_get_nb],
-                                 [], [],
-                                 [#include <ucp/api/ucp.h>])
-                  AC_CHECK_DECLS([ucm_test_events],
-                                 [], [],
-                                 [#include <ucm/api/ucm.h>])
-                  AC_CHECK_DECLS([UCP_ATOMIC_POST_OP_AND,
-                                  UCP_ATOMIC_POST_OP_OR,
-                                  UCP_ATOMIC_POST_OP_XOR,
-                                  UCP_ATOMIC_FETCH_OP_FAND,
-                                  UCP_ATOMIC_FETCH_OP_FOR,
-                                  UCP_ATOMIC_FETCH_OP_FXOR,
-                                  UCP_PARAM_FIELD_ESTIMATED_NUM_PPN],
-                                 [], [],
-                                 [#include <ucp/api/ucp.h>])
-                  AC_CHECK_DECLS([UCP_WORKER_ATTR_FIELD_ADDRESS_FLAGS],
-                                 [AC_DEFINE([HAVE_UCP_WORKER_ADDRESS_FLAGS], [1],
-                                            [have worker address attribute])], [],
-                                 [#include <ucp/api/ucp.h>])
+                  # Turn off UCX version v1.8 due to issue #8321
+                  AC_MSG_CHECKING([UCX version])
+                  AC_PREPROC_IFELSE([AC_LANG_PROGRAM([#include <ucp/api/ucp_version.h>
+                                                      #if (UCP_API_MAJOR == 1) && (UCP_API_MINOR == 8)
+                                                      #error "Invalid version"
+                                                      #endif], [])],
+                                    [AC_MSG_RESULT([ok (not 1.8.x)])],
+                                    [AC_MSG_RESULT([bad (1.8.x)])
+                                     AC_MSG_WARN([UCX support skipped because version 1.8.x was found, which has a known catastrophic issue.])
+                                     AC_MSG_WARN([Please upgrade to UCX version 1.9 or higher.])
+                                     ompi_check_ucx_happy=no])
+                  AS_IF([test "$ompi_check_ucx_happy" = yes],
+                        [
+                         AC_CHECK_DECLS([ucp_tag_send_nbr],
+                                        [AC_DEFINE([HAVE_UCP_TAG_SEND_NBR],[1],
+                                                   [have ucp_tag_send_nbr()])], [],
+                                        [#include <ucp/api/ucp.h>])
+                         AC_CHECK_DECLS([ucp_ep_flush_nb, ucp_worker_flush_nb,
+                                         ucp_request_check_status, ucp_put_nb, ucp_get_nb,
+                                         ucp_put_nbx, ucp_get_nbx, ucp_atomic_op_nbx],
+                                        [], [],
+                                        [#include <ucp/api/ucp.h>])
+                         AC_CHECK_DECLS([ucm_test_events,
+                                         ucm_test_external_events],
+                                        [], [],
+                                        [#include <ucm/api/ucm.h>])
+                         AC_CHECK_DECLS([UCP_ATOMIC_POST_OP_AND,
+                                         UCP_ATOMIC_POST_OP_OR,
+                                         UCP_ATOMIC_POST_OP_XOR,
+                                         UCP_ATOMIC_FETCH_OP_FAND,
+                                         UCP_ATOMIC_FETCH_OP_FOR,
+                                         UCP_ATOMIC_FETCH_OP_FXOR,
+                                         UCP_PARAM_FIELD_ESTIMATED_NUM_PPN,
+                                         UCP_WORKER_FLAG_IGNORE_REQUEST_LEAK],
+                                        [], [],
+                                        [#include <ucp/api/ucp.h>])
+                         AC_CHECK_DECLS([UCP_WORKER_ATTR_FIELD_ADDRESS_FLAGS],
+                                        [AC_DEFINE([HAVE_UCP_WORKER_ADDRESS_FLAGS], [1],
+                                                   [have worker address attribute])], [],
+                                        [#include <ucp/api/ucp.h>])
+                         AC_CHECK_DECLS([UCP_ATTR_FIELD_MEMORY_TYPES],
+                                        [AC_DEFINE([HAVE_UCP_ATTR_MEMORY_TYPES], [1],
+                                                   [have memory types attribute])], [],
+                                        [#include <ucp/api/ucp.h>])
+                         AC_CHECK_DECLS([ucp_tag_send_nbx,
+                                         ucp_tag_send_sync_nbx,
+                                         ucp_tag_recv_nbx],
+                                        [], [],
+                                        [#include <ucp/api/ucp.h>])
+                         AC_CHECK_TYPES([ucp_request_param_t],
+                                        [], [],
+                                        [[#include <ucp/api/ucp.h>]])
+                        ])
                   CPPFLAGS=$old_CPPFLAGS
 
                   OPAL_SUMMARY_ADD([[Transports]],[[Open UCX]],[$1],[$ompi_check_ucx_happy])])])
@@ -136,9 +165,11 @@ AC_DEFUN([OMPI_CHECK_UCX],[
           [$1_CPPFLAGS="[$]$1_CPPFLAGS $ompi_check_ucx_CPPFLAGS"
            $1_LDFLAGS="[$]$1_LDFLAGS $ompi_check_ucx_LDFLAGS"
            $1_LIBS="[$]$1_LIBS $ompi_check_ucx_LIBS"
+           AC_DEFINE([HAVE_UCX], [1], [have ucx])
            $2],
           [AS_IF([test ! -z "$with_ucx" && test "$with_ucx" != "no"],
                  [AC_MSG_ERROR([UCX support requested but not found.  Aborting])])
+           AC_DEFINE([HAVE_UCX], [0], [have ucx])
            $3])
 
     OPAL_VAR_SCOPE_POP

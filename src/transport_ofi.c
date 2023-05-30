@@ -1,6 +1,9 @@
 /* -*- C -*-
  *
- * Copyright (c) 2017 Intel Corporation. All rights reserved.
+ * Copyright (c) 2022 Intel Corporation. All rights reserved.
+ *
+ * Copyright (c) 2022 Cornelis Networks, Inc. All rights reserved.
+ *
  * This software is available to you under the BSD license.
  *
  * This file is part of the Sandia OpenSHMEM software package. For license
@@ -113,6 +116,8 @@ long 				ult_scheduling_mode;
 
 int shmem_transport_dtype_table[] = {
     FI_INT8,                  /* SHM_INTERNAL_SIGNED_BYTE    */
+    DTYPE_CHAR,               /* SHM_INTERNAL_CHAR           */
+    DTYPE_SIGNED_CHAR,        /* SHM_INTERNAL_SCHAR           */
     DTYPE_SHORT,              /* SHM_INTERNAL_SHORT          */
     DTYPE_INT,                /* SHM_INTERNAL_INT            */
     DTYPE_LONG,               /* SHM_INTERNAL_LONG           */
@@ -677,15 +682,17 @@ int allocate_recv_cntr_mr(void)
     /* Register separate data and heap segments using keys 0 and 1,
      * respectively.  In MR_BASIC_MODE, the keys are ignored and selected by
      * the provider. */
+    uint64_t key = 1;
     ret = fi_mr_reg(shmem_transport_ofi_domainfd, shmem_internal_heap_base,
                     shmem_internal_heap_length,
-                    FI_REMOTE_READ | FI_REMOTE_WRITE, 0, 1ULL, flags,
+                    FI_REMOTE_READ | FI_REMOTE_WRITE, 0, key, flags,
                     &shmem_transport_ofi_target_heap_mrfd, NULL);
     OFI_CHECK_RETURN_STR(ret, "target memory (heap) registration failed");
 
+    key = 0;
     ret = fi_mr_reg(shmem_transport_ofi_domainfd, shmem_internal_data_base,
                     shmem_internal_data_length,
-                    FI_REMOTE_READ | FI_REMOTE_WRITE, 0, 0ULL, flags,
+                    FI_REMOTE_READ | FI_REMOTE_WRITE, 0, key, flags,
                     &shmem_transport_ofi_target_data_mrfd, NULL);
     OFI_CHECK_RETURN_STR(ret, "target memory (data) registration failed");
 
@@ -700,6 +707,28 @@ int allocate_recv_cntr_mr(void)
                      &shmem_transport_ofi_target_cntrfd->fid,
                      FI_REMOTE_WRITE);
     OFI_CHECK_RETURN_STR(ret, "target CNTR binding to data MR failed");
+
+#ifdef ENABLE_MR_ENDPOINT
+    if (shmem_transport_ofi_info.p_info->domain_attr->mr_mode & FI_MR_ENDPOINT) {
+        ret = fi_ep_bind(shmem_transport_ofi_target_ep,
+                         &shmem_transport_ofi_target_cntrfd->fid, FI_REMOTE_WRITE);
+        OFI_CHECK_RETURN_STR(ret, "target CNTR binding to target EP failed");
+
+        ret = fi_mr_bind(shmem_transport_ofi_target_heap_mrfd,
+                         &shmem_transport_ofi_target_ep->fid, FI_REMOTE_WRITE);
+        OFI_CHECK_RETURN_STR(ret, "target EP binding to heap MR failed");
+
+        ret = fi_mr_enable(shmem_transport_ofi_target_heap_mrfd);
+        OFI_CHECK_RETURN_STR(ret, "target heap MR enable failed");
+
+        ret = fi_mr_bind(shmem_transport_ofi_target_data_mrfd,
+                         &shmem_transport_ofi_target_ep->fid, FI_REMOTE_WRITE);
+        OFI_CHECK_RETURN_STR(ret, "target EP binding to data MR failed");
+
+        ret = fi_mr_enable(shmem_transport_ofi_target_data_mrfd);
+        OFI_CHECK_RETURN_STR(ret, "target data MR enable failed");
+    }
+#endif
 
 #ifdef ENABLE_MR_RMA_EVENT
     if (shmem_transport_ofi_mr_rma_event) {
@@ -728,8 +757,8 @@ int publish_mr_info(void)
             heap_key = fi_mr_key(shmem_transport_ofi_target_heap_mrfd);
             data_key = fi_mr_key(shmem_transport_ofi_target_data_mrfd);
         } else {
-            heap_key = 1ULL;
-            data_key = 0ULL;
+            heap_key = 1;
+            data_key = 0;
         }
 
         err = shmem_runtime_put("fi_heap_key", &heap_key, sizeof(uint64_t));
@@ -1154,7 +1183,11 @@ int query_for_fabric(struct fabric_info *info)
                                    for put with signal implementation */
 #endif
     hints.addr_format         = FI_FORMAT_UNSPEC;
+#ifdef ENABLE_FI_MANUAL_PROGRESS
+    domain_attr.data_progress = FI_PROGRESS_MANUAL;
+#else
     domain_attr.data_progress = FI_PROGRESS_AUTO;
+#endif
     domain_attr.resource_mgmt = FI_RM_ENABLED;
 #ifdef ENABLE_MR_SCALABLE
                                 /* Scalable, offset-based addressing, formerly FI_MR_SCALABLE */
@@ -1165,6 +1198,9 @@ int query_for_fabric(struct fabric_info *info)
 #else
                                 /* Portable, absolute addressing, formerly FI_MR_BASIC */
     domain_attr.mr_mode       = FI_MR_VIRT_ADDR | FI_MR_ALLOCATED | FI_MR_PROV_KEY;
+#endif
+#ifdef ENABLE_MR_ENDPOINT
+    domain_attr.mr_mode |= FI_MR_ENDPOINT;
 #endif
 #if !defined(ENABLE_MR_SCALABLE) || !defined(ENABLE_REMOTE_VIRTUAL_ADDRESSING)
     domain_attr.mr_key_size   = 1; /* Heap and data use different MR keys, need
@@ -1290,6 +1326,8 @@ static int shmem_transport_ofi_target_ep_init(void)
     info->p_info->mode = 0;
     info->p_info->tx_attr->mode = 0;
     info->p_info->rx_attr->mode = 0;
+    info->p_info->tx_attr->caps = FI_RMA | FI_ATOMIC;
+    info->p_info->rx_attr->caps = info->p_info->caps;
 
     ret = fi_endpoint(shmem_transport_ofi_domainfd,
                       info->p_info, &shmem_transport_ofi_target_ep, NULL);
@@ -1299,21 +1337,21 @@ static int shmem_transport_ofi_target_ep_init(void)
     ret = fi_ep_bind(shmem_transport_ofi_target_ep, &shmem_transport_ofi_avfd->fid, 0);
     OFI_CHECK_RETURN_STR(ret, "fi_ep_bind AV to target endpoint failed");
 
-    ret = allocate_recv_cntr_mr();
-    if (ret != 0) return ret;
+    struct fi_cq_attr cq_attr = {0};
 
-     struct fi_cq_attr cq_attr = {0};
+    ret = fi_cq_open(shmem_transport_ofi_domainfd, &cq_attr,
+                     &shmem_transport_ofi_target_cq, NULL);
+    OFI_CHECK_RETURN_MSG(ret, "cq_open failed (%s)\n", fi_strerror(errno));
 
-     ret = fi_cq_open(shmem_transport_ofi_domainfd, &cq_attr,
-                      &shmem_transport_ofi_target_cq, NULL);
-     OFI_CHECK_RETURN_MSG(ret, "cq_open failed (%s)\n", fi_strerror(errno));
-
-     ret = fi_ep_bind(shmem_transport_ofi_target_ep,
-                      &shmem_transport_ofi_target_cq->fid, FI_RECV);
-     OFI_CHECK_RETURN_STR(ret, "fi_ep_bind CQ to target endpoint failed");
+    ret = fi_ep_bind(shmem_transport_ofi_target_ep,
+                     &shmem_transport_ofi_target_cq->fid, FI_TRANSMIT | FI_RECV);
+    OFI_CHECK_RETURN_STR(ret, "fi_ep_bind CQ to target endpoint failed");
 
     ret = fi_enable(shmem_transport_ofi_target_ep);
     OFI_CHECK_RETURN_STR(ret, "fi_enable on target endpoint failed");
+
+    ret = allocate_recv_cntr_mr();
+    if (ret) return ret;
 
     return 0;
 }
@@ -1348,11 +1386,13 @@ static int shmem_transport_ofi_ctx_init(shmem_transport_ctx_t *ctx, int id)
     struct fabric_info* info = &shmem_transport_ofi_info;
 
     info->p_info->ep_attr->tx_ctx_cnt = shmem_transport_ofi_stx_max > 0 ? FI_SHARED_CONTEXT : 0;
-    info->p_info->caps = FI_RMA | FI_WRITE | FI_READ | FI_ATOMIC;
+    info->p_info->caps = FI_RMA | FI_WRITE | FI_READ | FI_ATOMIC | FI_RECV;
     info->p_info->tx_attr->op_flags = FI_DELIVERY_COMPLETE;
     info->p_info->mode = 0;
     info->p_info->tx_attr->mode = 0;
     info->p_info->rx_attr->mode = 0;
+    info->p_info->tx_attr->caps = info->p_info->caps;
+    info->p_info->rx_attr->caps = FI_RECV; /* to drive progress on the CQ */;
 
     ctx->id = id;
 #ifdef USE_CTX_LOCK
@@ -1471,10 +1511,10 @@ int shmem_transport_init(void)
 
 
     /* The current bounce buffering implementation is only compatible with
-     * providers that don't require FI_CONTEXT */
-    if (shmem_transport_ofi_info.p_info->mode & FI_CONTEXT) {
+     * providers that don't require FI_CONTEXT or FI_CONTEXT2 */
+    if (shmem_transport_ofi_info.p_info->mode & FI_CONTEXT || shmem_transport_ofi_info.p_info->mode & FI_CONTEXT2) {
         if (shmem_internal_my_pe == 0 && shmem_internal_params.BOUNCE_SIZE > 0) {
-            DEBUG_STR("OFI provider requires FI_CONTEXT; disabling bounce buffering");
+            DEBUG_STR("OFI provider requires FI_CONTEXT and or FI_CONTEXT2; disabling bounce buffering");
         }
         shmem_transport_ofi_bounce_buffer_size = 0;
         shmem_transport_ofi_max_bounce_buffers = 0;
@@ -1784,12 +1824,6 @@ int shmem_transport_fini(void)
     }
     if (shmem_transport_ofi_stx_pool) free(shmem_transport_ofi_stx_pool);
 
-    ret = fi_close(&shmem_transport_ofi_target_ep->fid);
-    OFI_CHECK_ERROR_MSG(ret, "Target endpoint close failed (%s)\n", fi_strerror(errno));
-
-    ret = fi_close(&shmem_transport_ofi_target_cq->fid);
-    OFI_CHECK_ERROR_MSG(ret, "Target CQ close failed (%s)\n", fi_strerror(errno));
-
 #if defined(ENABLE_MR_SCALABLE) && defined(ENABLE_REMOTE_VIRTUAL_ADDRESSING)
     ret = fi_close(&shmem_transport_ofi_target_mrfd->fid);
     OFI_CHECK_ERROR_MSG(ret, "Target MR close failed (%s)\n", fi_strerror(errno));
@@ -1800,6 +1834,12 @@ int shmem_transport_fini(void)
     ret = fi_close(&shmem_transport_ofi_target_data_mrfd->fid);
     OFI_CHECK_ERROR_MSG(ret, "Target data MR close failed (%s)\n", fi_strerror(errno));
 #endif
+
+    ret = fi_close(&shmem_transport_ofi_target_ep->fid);
+    OFI_CHECK_ERROR_MSG(ret, "Target endpoint close failed (%s)\n", fi_strerror(errno));
+
+    ret = fi_close(&shmem_transport_ofi_target_cq->fid);
+    OFI_CHECK_ERROR_MSG(ret, "Target CQ close failed (%s)\n", fi_strerror(errno));
 
 #if ENABLE_TARGET_CNTR
     ret = fi_close(&shmem_transport_ofi_target_cntrfd->fid);

@@ -69,6 +69,7 @@ check_PROGRAMS = \
 	c11_test_shmem_get \
 	c11_test_shmem_p \
 	c11_test_shmem_put \
+	c11_test_shmem_put_signal \
 	c11_test_shmem_atomic_fetch \
 	c11_test_shmem_atomic_set \
 	c11_test_shmem_atomic_add \
@@ -95,6 +96,7 @@ check_PROGRAMS = \
 	broadcast_active_set \
 	reduce_active_set \
 	reduce_in_place \
+	bcast_in_place \
 	collect_active_set \
 	atomic_bitwise \
 	nop_collectives \
@@ -104,10 +106,12 @@ check_PROGRAMS = \
 	many-ctx \
 	shmem_test \
 	shmem_ptr \
+	shmem_team_ptr \
 	shmem_malloc_with_hints \
 	put_signal \
 	put_signal_nbi \
 	signal_fetch \
+	signal_wait_until \
 	shmem_team_b2b_collectives \
 	shmem_team_collect_active_set \
 	shmem_team_max \
@@ -115,6 +119,10 @@ check_PROGRAMS = \
 	shmem_team_shared \
 	shmem_team_split_2d \
 	shmem_team_translate \
+	shmem_team_reduce \
+	shmem_team_get_config \
+	shmem_team_negative_stride \
+	shmem_ctx_get_team \
 	atomic_nbi \
 	fadd_nbi
 
@@ -200,6 +208,11 @@ endif
 if SHMEMX_TESTS
 AM_CFLAGS = -DENABLE_SHMEMX_TESTS
 AM_CPPFLAGS += -DENABLE_SHMEMX_TESTS
+endif
+
+if ENABLE_DEPRECATED_TESTS
+AM_CFLAGS = -DENABLE_DEPRECATED_TESTS
+AM_CPPFLAGS += -DENABLE_DEPRECATED_TESTS
 endif
 
 # C Tests with special flags

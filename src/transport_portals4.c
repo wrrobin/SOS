@@ -46,6 +46,8 @@
 
 int shmem_transport_dtype_table[] = {
     PTL_INT8_T,               /* SHM_INTERNAL_SIGNED_BYTE    */
+    DTYPE_CHAR,               /* SHM_INTERNAL_CHAR           */
+    DTYPE_SIGNED_CHAR,        /* SHM_INTERNAL_SCHAR          */
     DTYPE_SHORT,              /* SHM_INTERNAL_SHORT          */
     DTYPE_INT,                /* SHM_INTERNAL_INT            */
     DTYPE_LONG,               /* SHM_INTERNAL_LONG           */
@@ -300,6 +302,7 @@ shmem_transport_ctx_create(struct shmem_internal_team_t *team, long options, shm
 
     *ctx = malloc(sizeof(shmem_transport_ctx_t));
     if (*ctx == NULL) {
+        SHMEM_MUTEX_UNLOCK(shmem_internal_mutex_ptl4_ctx);
         RAISE_WARN_STR("Out of memory allocating context");
         return 1;
     }

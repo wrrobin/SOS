@@ -13,7 +13,7 @@
 
 dnl Init Autoconf/Automake/Libtool
 
-AC_INIT([Sandia OpenSHMEM], [1.5.0rc1], [https://github.com/Sandia-OpenSHMEM/SOS/issues], [sandia-openshmem], [https://github.com/Sandia-OpenSHMEM/SOS])
+AC_INIT([Sandia OpenSHMEM], [1.5.2rc1], [https://github.com/Sandia-OpenSHMEM/SOS/issues], [sandia-openshmem], [https://github.com/Sandia-OpenSHMEM/SOS])
 AC_PREREQ([2.60])
 AC_CONFIG_AUX_DIR([config])
 AC_CONFIG_MACRO_DIR([config])
@@ -60,6 +60,11 @@ AC_ARG_ENABLE([error-checking],
 AS_IF([test "$enable_error_checking" = "yes"], [AC_DEFINE([ENABLE_ERROR_CHECKING], [1], [Enable argument checking])])
 AM_CONDITIONAL([ENABLE_ERROR_CHECKING], [test "$enable_error_checking" = "yes"])
 
+AC_ARG_ENABLE([deprecated-tests],
+    [AC_HELP_STRING([--enable-deprecated-tests],
+                    [Enable deprecated SHMEM API calls in tests (default:disabled)])])
+AM_CONDITIONAL([ENABLE_DEPRECATED_TESTS], [test "$enable_deprecated_tests" = "yes"])
+
 AC_ARG_ENABLE([hard-polling],
     [AC_HELP_STRING([--enable-hard-polling],
                     [Enable hard polling of wait calls (default:automatic)])])
@@ -68,16 +73,16 @@ AS_IF([test "$enable_hard_polling" = "yes"], [AC_DEFINE([ENABLE_HARD_POLLING], [
 AC_ARG_ENABLE([completion-polling],
     [AC_HELP_STRING([--enable-completion-polling],
                     [Enable polling in quiet, fence, and local completion operations (default:disabled)])])
-AS_IF([test "$enable_completion_polling" = "yes"],
-      [AC_DEFINE([DEFAULT_POLL_LIMIT], [-1], [Poll limit for local/remote completions])],
-      [AC_DEFINE([DEFAULT_POLL_LIMIT], [0], [Poll limit for local/remote completions])])
 
 AC_ARG_ENABLE([manual-progress],
     [AC_HELP_STRING([--enable-manual-progress],
                     [Enable intermittent progress calls inside transport layer (default:disabled)])])
+AS_IF([test "$enable_completion_polling" = "yes" -o "$enable_manual_progress" = "yes"],
+      [AC_DEFINE([DEFAULT_POLL_LIMIT], [-1], [Poll limit for local/remote completions])],
+      [AC_DEFINE([DEFAULT_POLL_LIMIT], [0], [Poll limit for local/remote completions])])
+
 AS_IF([test "$enable_manual_progress" = "yes"],
-      [AC_DEFINE([ENABLE_MANUAL_PROGRESS], [1], [Enable manual progress])
-       AC_DEFINE([DEFAULT_POLL_LIMIT], [-1], [Poll limit for local/remote completions])])
+      [AC_DEFINE([ENABLE_MANUAL_PROGRESS], [1], [Enable manual progress])])
 
 AC_ARG_ENABLE([total-data-ordering],
     [AC_HELP_STRING([--enable-total-data-ordering],
@@ -208,6 +213,18 @@ AS_CASE([$enable_ofi_mr],
              AC_DEFINE([ENABLE_MR_SCALABLE], [1], [If defined, the OFI transport will use FI_MR_SCALABLE])],
         [AC_MSG_ERROR([Invalid OFI memory registration mode: $enable_ofi_mr])])
 
+AC_ARG_ENABLE([mr-endpoint],
+    [AC_HELP_STRING([--enable-mr-endpoint],
+                    [Use FI_MR_ENDPOINT to enable cxi provider. (default: disabled)])])
+AS_IF([test "$enable_mr_endpoint" = "yes"],
+      [AC_DEFINE([ENABLE_MR_ENDPOINT], [1], [If defined, the OFI transport will use FI_MR_ENDPOINT])])
+
+AC_ARG_ENABLE([ofi-manual-progress],
+    [AC_HELP_STRING([--enable-ofi-manual-progress],
+                    [Use FI_MANUAL_PROGRESS for data progress control mode. (default: disabled)])])
+AS_IF([test "$enable_ofi_manual_progress" = "yes"],
+      [AC_DEFINE([ENABLE_FI_MANUAL_PROGRESS], [1], [If defined, the OFI will use FI_MANUAL_PROGRESS as data progress mode. This is currently required for cxi provider.])])
+
 AC_ARG_ENABLE([max-teams],
     [AC_HELP_STRING([--enable-max-teams=NUMBER],
                     [Default value for the maximum number of teams allowed (default: 10)])])
@@ -281,7 +298,15 @@ AC_SUBST([WRAPPER_COMPILER_CC])
 AC_MSG_CHECKING([if -std=gnu11 works])
 
 AC_LANG_PUSH([C])
-CFLAGS="-pedantic-errors -std=gnu11"
+C_COMPILER_VERSION=$("$CC" --version 2> /dev/null)
+IS_ONEAPI_COMPILER=$(echo $C_COMPILER_VERSION | $GREP -c -E 'Intel\(R\) oneAPI')
+
+if test "$IS_ONEAPI_COMPILER" -ne "0" ; then
+  CFLAGS="-std=gnu11"
+else
+  CFLAGS="-pedantic-errors -std=gnu11"
+fi
+
 AC_COMPILE_IFELSE([AC_LANG_PROGRAM([[
                    void g(int i){}
                    #define f(X) _Generic((X), default: g)(X)
@@ -313,6 +338,8 @@ else
   FC=
 fi
 if test "$FC" != "" ; then
+  #The oneAPI ifx compiler requires autoconf 2.70 to support AC_FC_WRAPPERS. If problems, please try ifort or updating autoconf:
+  #https://community.intel.com/t5/Intel-Fortran-Compiler/ifx-2021-1-beta04-HPC-Toolkit-build-error-with-loopopt/m-p/1184181
   AC_FC_WRAPPERS
 fi
 
@@ -340,11 +367,13 @@ AC_SEARCH_LIBS([ceil], [m], [], AC_MSG_ERROR([unable to find ceil() function]))
 
 dnl check for libraries
 
-OMPI_CHECK_PORTALS4([portals4],
+OPAL_CHECK_PORTALS4([portals4],
     [transport_portals4="yes"],
     [transport_portals4="no"])
 
-OPAL_CHECK_OFI([ofi],
+OPAL_CHECK_OFI
+
+AS_IF([test "$opal_ofi_happy" = "yes"],
     [transport_ofi="yes"],
     [transport_ofi="no"])
 
@@ -497,11 +526,13 @@ fi
 if test "$bt_execinfo" = "yes"; then
   use_bt_option="$use_bt_option execinfo"
   AC_DEFINE([USE_BT_EXECINFO], [1], [Execinfo library calls for backtrace])
+  if test "$IS_ONEAPI_COMPILER" -eq "0" ; then
   case $host_os in
       linux*)
            CFLAGS="$CFLAGS -rdynamic"
            ;;
    esac
+  fi
 fi
 if test -n "$GDB_PATH"; then
   use_bt_option="$use_bt_option gdb"
@@ -526,6 +557,7 @@ AC_COMPILE_IFELSE([AC_LANG_PROGRAM([[ ]], [[ _Complex v; ]] )],
 AC_LANG_POP([C])
 
 SHMEM_FIND_INT_TYPE([char], [$transport])
+SHMEM_FIND_INT_TYPE([signed char], [$transport])
 SHMEM_FIND_INT_TYPE([short], [$transport])
 SHMEM_FIND_INT_TYPE([int], [$transport])
 SHMEM_FIND_INT_TYPE([long], [$transport])
@@ -812,11 +844,11 @@ if test "$transport_portals4" = "yes" ; then
 fi
 
 if test "$transport_ofi" = "yes" ; then
-    CPPFLAGS="$CPPFLAGS $ofi_CPPFLAGS"
-    LDFLAGS="$LDFLAGS $ofi_LDFLAGS"
-    LIBS="$LIBS $ofi_LIBS"
-    WRAPPER_COMPILER_EXTRA_LDFLAGS="$ofi_LDFLAGS"
-    WRAPPER_COMPILER_EXTRA_LIBS="$ofi_LIBS"
+    CPPFLAGS="$CPPFLAGS $opal_ofi_CPPFLAGS"
+    LDFLAGS="$LDFLAGS $opal_ofi_LDFLAGS"
+    LIBS="$LIBS $opal_ofi_LIBS"
+    WRAPPER_COMPILER_EXTRA_LDFLAGS="$opal_ofi_LDFLAGS"
+    WRAPPER_COMPILER_EXTRA_LIBS="$opal_ofi_LIBS"
 fi
 
 if test "$transport_ucx" = "yes" ; then
