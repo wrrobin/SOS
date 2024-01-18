@@ -485,10 +485,15 @@ void shmem_transport_put_quiet(shmem_transport_ctx_t* ctx)
     }
     cnt_new = SHMEM_TRANSPORT_OFI_CNTR_READ(&ctx->pending_put_cntr);
     do {
-        cnt = cnt_new;
-        ssize_t ret = fi_cntr_wait(ctx->put_cntr, cnt, -1);
-        cnt_new = SHMEM_TRANSPORT_OFI_CNTR_READ(&ctx->pending_put_cntr);
-        OFI_CTX_CHECK_ERROR(ctx, ret);
+        if (shmem_transport_ofi_put_poll_limit < 0) {
+            cnt = fi_cntr_read(ctx->put_cntr);
+            cnt_new = SHMEM_TRANSPORT_OFI_CNTR_READ(&ctx->pending_put_cntr);
+        } else {
+            cnt = cnt_new;
+            ssize_t ret = fi_cntr_wait(ctx->put_cntr, cnt, -1);
+            cnt_new = SHMEM_TRANSPORT_OFI_CNTR_READ(&ctx->pending_put_cntr);
+            OFI_CTX_CHECK_ERROR(ctx, ret);
+        }
     } while (cnt < cnt_new);
     shmem_internal_assert(cnt == cnt_new);
 
@@ -970,10 +975,15 @@ void shmem_transport_get_wait(shmem_transport_ctx_t* ctx)
     }
     cnt_new = SHMEM_TRANSPORT_OFI_CNTR_READ(&ctx->pending_get_cntr);
     do {
-        cnt = cnt_new;
-        ssize_t ret = fi_cntr_wait(ctx->get_cntr, cnt, -1);
-        cnt_new = SHMEM_TRANSPORT_OFI_CNTR_READ(&ctx->pending_get_cntr);
-        OFI_CTX_CHECK_ERROR(ctx, ret);
+        if (shmem_transport_ofi_get_poll_limit < 0) {
+            cnt = fi_cntr_read(ctx->get_cntr);
+            cnt_new = SHMEM_TRANSPORT_OFI_CNTR_READ(&ctx->pending_get_cntr);
+        } else {
+            cnt = cnt_new;
+            ssize_t ret = fi_cntr_wait(ctx->get_cntr, cnt, -1);
+            cnt_new = SHMEM_TRANSPORT_OFI_CNTR_READ(&ctx->pending_get_cntr);
+            OFI_CTX_CHECK_ERROR(ctx, ret);
+        }
     } while (cnt < cnt_new);
     shmem_internal_assert(cnt == cnt_new);
 
