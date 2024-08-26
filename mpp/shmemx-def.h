@@ -22,8 +22,13 @@ typedef struct {
     uint64_t target;
 } shmemx_pcntr_t;
 
+/* External Heaps */
 #define SHMEMX_EXTERNAL_HEAP_ZE 0
 #define SHMEMX_EXTERNAL_HEAP_CUDA 1
+
+typedef struct shmemx_impl_heap_t {
+    int dummy;
+} *shmemx_heap_t;
 
 #if SHMEM_HAVE_ATTRIBUTE_VISIBILITY == 1
     __attribute__((visibility("default"))) extern shmem_team_t SHMEMX_TEAM_NODE;

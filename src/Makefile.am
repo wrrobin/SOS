@@ -19,7 +19,8 @@ GEN_BINDINGS = \
 	collectives_c.c \
 	data_c.c \
 	synchronization_c.c \
-	teams_c.c
+	teams_c.c \
+	heaps_c.c
 
 
 if HAVE_FORTRAN
@@ -65,7 +66,9 @@ libsma_la_SOURCES = \
 	perf_counters_c.c \
 	backtrace.c \
 	shmem_team.c \
-	shmem_team.h
+	shmem_team.h \
+	shmem_heap.c \
+	shmem_heap.h
 
 BUILT_SOURCES = $(GEN_BINDINGS) \
 		build_info.h \
@@ -181,6 +184,7 @@ EXTRA_DIST = shmem_compiler_script.in \
              data_f.c4                \
              synchronization_c.c4     \
              teams_c.c4               \
+             heaps_c.c4               \
              shr_transport.h4
 
 do_subst = sed -e 's|[@]PERL[@]|$(PERL)|g' \

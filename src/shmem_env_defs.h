@@ -30,6 +30,8 @@ SHMEM_INTERNAL_ENV_DEF(DEBUG, bool, false, SHMEM_INTERNAL_ENV_CAT_OPENSHMEM,
                        "Enable debugging messages")
 SHMEM_INTERNAL_ENV_DEF(SYMMETRIC_SIZE, size, 512*1024*1024, SHMEM_INTERNAL_ENV_CAT_OPENSHMEM,
                        "Symmetric heap size")
+SHMEM_INTERNAL_ENV_DEF(MAX_EXTERNAL_HEAP_COUNT, long, 4, SHMEM_INTERNAL_ENV_CAT_OTHER,
+                       "Maximum number of external heap count")
 
 #ifdef __linux__
 SHMEM_INTERNAL_ENV_DEF(SYMMETRIC_HEAP_USE_HUGE_PAGES, bool, false, SHMEM_INTERNAL_ENV_CAT_OTHER,

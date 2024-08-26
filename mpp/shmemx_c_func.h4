@@ -90,8 +90,16 @@ SHMEM_FUNCTION_ATTRIBUTES void SHPRE()shmemx_ctx_signal_add(shmem_ctx_t ctx, uin
 SHMEM_FUNCTION_ATTRIBUTES void SHPRE()shmemx_signal_set(uint64_t *sig_addr, uint64_t signal, int pe);
 SHMEM_FUNCTION_ATTRIBUTES void SHPRE()shmemx_ctx_signal_set(shmem_ctx_t ctx, uint64_t *sig_addr, uint64_t signal, int pe);
 
+/* Multiple heap extensions */
+SHMEM_FUNCTION_ATTRIBUTES int SHPRE()shmemx_heap_create(void *base, size_t size, int device_type, int device_index, shmemx_heap_t *heap);
+SHMEM_FUNCTION_ATTRIBUTES int SHPRE()shmemx_heap_allocate(size_t size, int device_type, int device_index, shmemx_heap_t *heap);
+SHMEM_FUNCTION_ATTRIBUTES void *SHPRE()shmemx_heap_malloc(shmemx_heap_t heap, size_t size);
+SHMEM_FUNCTION_ATTRIBUTES void *SHPRE()shmemx_heap_calloc(shmemx_heap_t heap, size_t count, size_t size);
+SHMEM_FUNCTION_ATTRIBUTES void *SHPRE()shmemx_heap_align(shmemx_heap_t heap, size_t alignment, size_t size);
+/*SHMEM_FUNCTION_ATTRIBUTES void *SHPRE()shmemx_heap_realloc(void *ptr, size_t size);*/
+SHMEM_FUNCTION_ATTRIBUTES void SHPRE()shmemx_heap_free(shmemx_heap_t heap, void *ptr);
+
 /* Separate initializers */
-SHMEM_FUNCTION_ATTRIBUTES void SHPRE()shmemx_heap_create(void *base, size_t size, int device_type, int device_index);
 SHMEM_FUNCTION_ATTRIBUTES void SHPRE()shmemx_heap_preinit(void);
 SHMEM_FUNCTION_ATTRIBUTES int SHPRE()shmemx_heap_preinit_thread(int requested, int *provided);
 SHMEM_FUNCTION_ATTRIBUTES void SHPRE()shmemx_heap_postinit(void);

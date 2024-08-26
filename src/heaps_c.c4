@@ -1,0 +1,64 @@
+/* -*- C -*-
+ *
+ * Copyright (c) 2024 Intel Corporation. All rights reserved.
+ * This software is available to you under the BSD license.
+ *
+ * This file is part of the Sandia OpenSHMEM software package. For license
+ * information, see the LICENSE file in the top level directory of the
+ * distribution.
+ *
+ */
+
+#include "config.h"
+
+#define SHMEM_INTERNAL_INCLUDE
+#include "shmem.h"
+#include "shmemx.h"
+
+#include "shmem_internal.h"
+#include "shmem_heap.h"
+
+int SHMEM_FUNCTION_ATTRIBUTES
+shmemx_heap_create(void *base, size_t size, int device_type, int device_index, shmemx_heap_t *heap) {
+
+    int ret = 0;
+
+    if (shmem_internal_initialized) {
+        RAISE_WARN_MSG("Ignoring pre-setup. Heap already initialized\n");
+        return -1;
+    }
+
+    ret = shmem_internal_heap_create(base, size, device_type, device_index, (shmem_internal_heap_t **) heap);
+
+    return ret;
+}
+
+int SHMEM_FUNCTION_ATTRIBUTES
+shmemx_heap_allocate(size_t size, int device_type, int device_index, shmemx_heap_t *heap) {
+    // TODO: Allocate heap per user request from the device
+    return 0;
+}
+
+void SHMEM_FUNCTION_ATTRIBUTES *
+shmemx_heap_malloc(shmemx_heap_t heap, size_t size) {
+    void *ret = NULL;
+    if (size == 0) return ret;
+
+    SHMEM_ERR_CHECK_INITIALIZED();
+
+    ret = shmem_internal_heap_malloc((shmem_internal_heap_t *) heap, size);
+
+    return ret;
+}
+
+void SHMEM_FUNCTION_ATTRIBUTES *
+shmemx_heap_calloc(shmemx_heap_t heap, size_t count, size_t size) {
+    void *ret = NULL;
+    if (size == 0 || count == 0) return ret;
+
+    SHMEM_ERR_CHECK_INITIALIZED();
+
+    ret = shmem_internal_heap_calloc((shmem_internal_heap_t *) heap, count, size);
+
+    return ret;
+} 

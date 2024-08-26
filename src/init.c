@@ -37,6 +37,7 @@
 #include "runtime.h"
 #include "build_info.h"
 #include "shmem_team.h"
+#include "shmem_heap.h"
 
 #if defined(ENABLE_REMOTE_VIRTUAL_ADDRESSING) && defined(__linux__)
 #include <sys/personality.h>
@@ -381,6 +382,13 @@ shmem_internal_heap_postinit(void)
               shmem_internal_my_pe,
               shmem_internal_heap_base, shmem_internal_heap_length,
               shmem_internal_data_base, shmem_internal_data_length);
+
+    /* initialize heaps */
+    ret = shmem_internal_heap_init();
+    if (0 != ret) {
+        RETURN_ERROR_MSG("Heap initialization failed (%d)\n", ret);
+        goto cleanup_postinit;
+    }
 
 #ifdef HAVE_SCHED_GETAFFINITY
 #ifdef USE_HWLOC
